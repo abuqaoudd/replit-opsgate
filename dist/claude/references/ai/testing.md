@@ -1,4 +1,4 @@
-# METCO Verification Instruction Object
+# Verification Instruction Object
 
 Read for every implementation, audit, review, refactor, migration, seed, or verification task.
 

@@ -1,10 +1,10 @@
-# METCO Internal Process Modes Specification
+# Internal Process Modes Specification
 
 Specification version: 6
 
 ## 1. Purpose
 
-Internal modes provide deterministic process selection, reporting, and validation across the METCO project. Routers and skills select them automatically. Users describe outcomes and scope; they do not need to know, choose, or type mode identifiers.
+Internal modes provide deterministic process selection, reporting, and validation across any project using this kit. Routers and skills select them automatically. Users describe outcomes and scope; they do not need to know, choose, or type mode identifiers.
 
 ## 2. Rules
 
@@ -39,20 +39,20 @@ Obsolete labels: `NORMAL_IMPLEMENTATION`, `APPROVED_ARCHITECTURE_REFACTOR`, `AUD
 
 | Mode | Observable process | Primary skill |
 |---|---|---|
-| `FRONTEND_IMPLEMENTATION` | React/client feature or defect implementation | `metco-frontend-development` |
-| `API_IMPLEMENTATION` | API route, service, repository, or backend behavior | `metco-api-server-development` |
-| `FULL_STACK_IMPLEMENTATION` | Coordinated client and Replit backend outcome in one authorized phase | `metco-full-stack-feature` |
-| `AUTH_PERMISSION_IMPLEMENTATION` | Authentication, authorization, tenant, role, or object-scope behavior | `metco-auth-permission-workflow` |
-| `FORM_WORKFLOW_IMPLEMENTATION` | Form state, validation, mutations, save/cancel, and errors | `metco-form-workflow` |
-| `TABLE_REPORTING_IMPLEMENTATION` | Tables, filters, sorts, pagination, exports, or reporting | `metco-table-reporting-workflow` |
-| `FRONTEND_ARCHITECTURE_REFACTOR` | Broad ownership, reuse, decomposition, or consolidation | `metco-frontend-architecture-refactor` |
-| `DATABASE_SCHEMA_EVOLUTION` | Schema, ERD mapping, migration, index, backfill, compatibility | `metco-database-schema-migration` |
-| `NONPRODUCTION_DATA_SEEDING` | Deterministic development/test seed data | `metco-data-seeding` |
-| `BUG_DIAGNOSIS` | Unknown defect cause, reproduction, or evidence-only root cause | `metco-bug-diagnosis` |
-| `PERFORMANCE_OPTIMIZATION` | Measured latency, render, query, memory, or bundle bottleneck | `metco-performance-optimization` |
-| `UI_UX_REVIEW` | Visual, interaction, responsive, accessibility, or usability review | `metco-ui-ux-review` |
-| `SAFE_VERIFICATION` | Read-only QA, regression, security, compliance, or release evidence | `metco-safe-verification` |
-| `INSTRUCTION_SYSTEM_MAINTENANCE` | `replit.md`, `ai/**`, or `.agents/skills/**` changes | `metco-instruction-maintenance` |
+| `FRONTEND_IMPLEMENTATION` | React/client feature or defect implementation | `frontend-development` |
+| `API_IMPLEMENTATION` | API route, service, repository, or backend behavior | `api-server-development` |
+| `FULL_STACK_IMPLEMENTATION` | Coordinated client and Replit backend outcome in one authorized phase | `full-stack-feature` |
+| `AUTH_PERMISSION_IMPLEMENTATION` | Authentication, authorization, tenant, role, or object-scope behavior | `auth-permission-workflow` |
+| `FORM_WORKFLOW_IMPLEMENTATION` | Form state, validation, mutations, save/cancel, and errors | `form-workflow` |
+| `TABLE_REPORTING_IMPLEMENTATION` | Tables, filters, sorts, pagination, exports, or reporting | `table-reporting-workflow` |
+| `FRONTEND_ARCHITECTURE_REFACTOR` | Broad ownership, reuse, decomposition, or consolidation | `frontend-architecture-refactor` |
+| `DATABASE_SCHEMA_EVOLUTION` | Schema, ERD mapping, migration, index, backfill, compatibility | `database-schema-migration` |
+| `NONPRODUCTION_DATA_SEEDING` | Deterministic development/test seed data | `data-seeding` |
+| `BUG_DIAGNOSIS` | Unknown defect cause, reproduction, or evidence-only root cause | `bug-diagnosis` |
+| `PERFORMANCE_OPTIMIZATION` | Measured latency, render, query, memory, or bundle bottleneck | `performance-optimization` |
+| `UI_UX_REVIEW` | Visual, interaction, responsive, accessibility, or usability review | `ui-ux-review` |
+| `SAFE_VERIFICATION` | Read-only QA, regression, security, compliance, or release evidence | `safe-verification` |
+| `INSTRUCTION_SYSTEM_MAINTENANCE` | `replit.md`, `ai/**`, or `.agents/skills/**` changes | `instruction-maintenance` |
 
 ## 5. Supporting domain concerns
 

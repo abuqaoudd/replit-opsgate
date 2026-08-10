@@ -1,4 +1,4 @@
-# METCO Backend/API Instruction Object
+# Backend/API Instruction Object
 
 Applies to approved work inside this project's backend source root (see `replit.md` §2 - the active profile's `backend_root`, or the task's explicitly authorized backend path when no profile applies).
 

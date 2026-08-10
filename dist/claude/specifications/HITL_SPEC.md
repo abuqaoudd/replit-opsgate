@@ -1,4 +1,4 @@
-# METCO Human-in-the-Loop Specification
+# Human-in-the-Loop Specification
 
 Specification version: 6
 

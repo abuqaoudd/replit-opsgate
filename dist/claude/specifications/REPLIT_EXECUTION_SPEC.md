@@ -1,10 +1,10 @@
-# METCO Replit Execution Specification
+# Replit Execution Specification
 
 Specification version: 6
 
 ## 1. Requirements
 
-- `EXEC-001`: Replit MUST load `replit.md` and `ai/metco.md`, then automatically select the most specific installed skill.
+- `EXEC-001`: Replit MUST load `replit.md` and the active profile's business file (e.g. `ai/metco.md` for the `metco` profile), if the active profile has one, then automatically select the most specific installed skill.
 - `EXEC-002`: The user MUST NOT be asked to select a workflow label.
 - `EXEC-003`: The selected skill MUST remain subordinate to explicit scope and permanent protections.
 - `EXEC-004`: Discovery MUST start at named paths and expand only for a concrete unresolved dependency.

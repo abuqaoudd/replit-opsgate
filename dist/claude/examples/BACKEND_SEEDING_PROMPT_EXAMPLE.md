@@ -1,14 +1,14 @@
-# METCO development-data seeding
+# Development-data seeding
 
-Act as a senior TypeScript backend and PostgreSQL engineer. Build a deterministic, idempotent METCO development seed system in the existing Replit backend.
+Act as a senior TypeScript backend and PostgreSQL engineer. Build a deterministic, idempotent development seed system in the existing Replit backend.
 
 ## Load and scope
 
-Read `replit.md` and `ai/metco.md`. Automatically route this outcome to the non-production seeding process and the most specific installed skill; do not ask the user to choose a mode or skill. Then read `ai/database.md`, `ai/backend.md`, `ai/security.md`, `ai/testing.md`, and that skill.
+Read `replit.md` and the active profile's business file (e.g. `ai/metco.md`), if it has one. Automatically route this outcome to the non-production seeding process and the most specific installed skill; do not ask the user to choose a mode or skill. Then read `ai/database.md`, `ai/backend.md`, `ai/security.md`, `ai/testing.md`, and that skill.
 
 - Write only the explicitly authorized established seed paths and directly related backend tests.
 - Use minimum read-only access to the Replit-owned schema and current services/validators.
-- Never access `metco-api/**`, `pipeline/**`, production data, packages, config, environment files, or deployment files.
+- Never access this project's protected paths (resolved from its active profile - see `protected_paths_for(request)`), production data, packages, config, environment files, or deployment files.
 - Do not change schema/migrations or place seed inserts in migration SQL.
 
 Assume `PRODUCTION_ACCESS: NO` and destructive reset is not authorized.

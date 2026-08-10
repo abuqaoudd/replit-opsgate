@@ -1,4 +1,4 @@
-# METCO Security Instruction Object
+# Security Instruction Object
 
 Read for authentication, authorization, sensitive data, uploads, logging, mutations, integrations, or security review.
 

@@ -1,4 +1,4 @@
-# METCO Frontend Instruction Object
+# Frontend Instruction Object
 
 Applies to approved work inside this project's frontend source root (see `replit.md` §2 - the active profile's `frontend_root`, or the task's explicitly authorized frontend path when no profile applies).
 

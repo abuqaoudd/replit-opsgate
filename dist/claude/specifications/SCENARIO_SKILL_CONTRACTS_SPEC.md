@@ -1,4 +1,4 @@
-# METCO Scenario Skill Contracts Specification
+# Scenario Skill Contracts Specification
 
 Specification version: 6
 

@@ -1,8 +1,8 @@
-# METCO Replit Project Instructions
+# Replit Project Instructions
 
 Instruction version: 6 engine package  
 Content baseline: 6  
-Purpose: Govern Replit Agent work on METCO-owned frontend and backend artifacts.
+Purpose: Govern Replit Agent work on this project's own frontend and backend artifacts, whichever project this file has been installed into - resolved via the active profile (Section 2), never assumed.
 
 ## 1. Authority
 
@@ -12,8 +12,8 @@ Apply: platform/safety → this file → routed `ai/**` → applicable `.agents/
 
 Normal application writes are limited to this project's own frontend and backend source roots, plus directly related tests inside those trees. Never assume a specific project's folder names - resolve the actual roots in this order:
 
-1. If `metco-kit/tools/**` is present, run `python3 metco-kit/tools/show-profile.py` (or read the active profile from `metco-kit/tools/metco_contracts.py`'s `PROFILES`) to get this project's `frontend_root` and `backend_root`. `METCO_PROFILE` (env var) or a `"profile"` field on a request selects the profile explicitly; without either, the default is `generic-replit`, whose roots are unset until a project-specific profile is added for this project.
-2. If the resolved roots are unset, or `metco-kit` is not present at all, use only the exact paths the current task explicitly authorizes as write scope - never guess a folder name from convention or from another project.
+1. Look for this engine's `tools/` directory somewhere in this project (it is vendored in, commonly as a git submodule, and may be named `metco-kit`, `replit-opsgate`, or anything else the project chose - identify it by the presence of `tools/opsgate_contracts.py`, not by a fixed folder name). If found, run `python3 <that-directory>/tools/show-profile.py` (or read the active profile from that directory's `tools/opsgate_contracts.py`'s `PROFILES`) to get this project's `frontend_root` and `backend_root`. `OPSGATE_PROFILE` (env var, legacy name `METCO_PROFILE` also honored) or a `"profile"` field on a request selects the profile explicitly; without either, the default is `generic-replit`, whose roots are unset until a project-specific profile is added for this project.
+2. If the resolved roots are unset, or no such engine directory is present at all, use only the exact paths the current task explicitly authorizes as write scope - never guess a folder name from convention or from another project.
 
 Default deny everything else. Read supporting Python contracts or named contracts only when needed and never edit them without explicit authority for the exact target.
 
@@ -21,10 +21,10 @@ Default deny everything else. Read supporting Python contracts or named contract
 
 Never open, list, search, index, inspect, compare, execute, test, reference, copy, or modify:
 
-- `metco-api/**`
-- `pipeline/**` and any case variant
+- Any path the active profile's `never_access` list marks protected (see Section 2 for how to resolve the active profile) - e.g. the `metco` profile adds `metco-api/**` and `pipeline/**` (any case variant) on top of the universal baseline below
+- `.git/**`, `.env`, `.env.*`, `node_modules/**`, `.github/workflows/**`, `.claude/**`, `.agents/memory/**` - universal baseline, protected under every profile
 - aliases, links, mounts, mirrors, caches, or generated copies resolving to protected content
-- `.claude/**`, `.github/workflows/**`, and CI/CD, release, deployment, or production automation
+- CI/CD, release, deployment, or production automation
 
 If a path may resolve to protected content, treat it as protected and report the dependency without inspecting it.
 
@@ -38,7 +38,7 @@ The user provides an outcome, allowed scope, source evidence, and explicit autho
 
 Before inspection:
 
-1. Read this file and `ai/metco.md`.
+1. Read this file and the active profile's business file (e.g. `ai/metco.md` for the `metco` profile), if it has one.
 2. Determine the current observable outcome and affected domain.
 3. Select the most specific installed `.agents/skills/**/SKILL.md` automatically.
 4. Read only the triggered `ai/**` files and the selected skill.
@@ -50,20 +50,20 @@ Select exactly one internal mode automatically and record it in the final report
 
 | Internal mode | Use | Primary skill |
 |---|---|---|
-| `FRONTEND_IMPLEMENTATION` | Ordinary React/client behavior | `metco-frontend-development` |
-| `API_IMPLEMENTATION` | API/service/repository behavior | `metco-api-server-development` |
-| `FULL_STACK_IMPLEMENTATION` | Current phase writes coordinated client and backend behavior | `metco-full-stack-feature` |
-| `AUTH_PERMISSION_IMPLEMENTATION` | Authentication, authorization, tenant, role, or object scope | `metco-auth-permission-workflow` |
-| `FORM_WORKFLOW_IMPLEMENTATION` | Form state, validation, save/cancel, mutations | `metco-form-workflow` |
-| `TABLE_REPORTING_IMPLEMENTATION` | Tables, filters, sorting, pagination, exports, reporting | `metco-table-reporting-workflow` |
-| `FRONTEND_ARCHITECTURE_REFACTOR` | Broad frontend ownership or consolidation | `metco-frontend-architecture-refactor` |
-| `DATABASE_SCHEMA_EVOLUTION` | Schema, mapping, migration, index, backfill, compatibility | `metco-database-schema-migration` |
-| `NONPRODUCTION_DATA_SEEDING` | Deterministic development/test data | `metco-data-seeding` |
-| `BUG_DIAGNOSIS` | Reproduction and root-cause evidence | `metco-bug-diagnosis` |
-| `PERFORMANCE_OPTIMIZATION` | Measured performance bottleneck | `metco-performance-optimization` |
-| `UI_UX_REVIEW` | Visual, responsive, accessibility, or usability review | `metco-ui-ux-review` |
-| `SAFE_VERIFICATION` | Read-only QA, regression, compliance, or release evidence | `metco-safe-verification` |
-| `INSTRUCTION_SYSTEM_MAINTENANCE` | `replit.md`, `ai/**`, or `.agents/skills/**` | `metco-instruction-maintenance` |
+| `FRONTEND_IMPLEMENTATION` | Ordinary React/client behavior | `frontend-development` |
+| `API_IMPLEMENTATION` | API/service/repository behavior | `api-server-development` |
+| `FULL_STACK_IMPLEMENTATION` | Current phase writes coordinated client and backend behavior | `full-stack-feature` |
+| `AUTH_PERMISSION_IMPLEMENTATION` | Authentication, authorization, tenant, role, or object scope | `auth-permission-workflow` |
+| `FORM_WORKFLOW_IMPLEMENTATION` | Form state, validation, save/cancel, mutations | `form-workflow` |
+| `TABLE_REPORTING_IMPLEMENTATION` | Tables, filters, sorting, pagination, exports, reporting | `table-reporting-workflow` |
+| `FRONTEND_ARCHITECTURE_REFACTOR` | Broad frontend ownership or consolidation | `frontend-architecture-refactor` |
+| `DATABASE_SCHEMA_EVOLUTION` | Schema, mapping, migration, index, backfill, compatibility | `database-schema-migration` |
+| `NONPRODUCTION_DATA_SEEDING` | Deterministic development/test data | `data-seeding` |
+| `BUG_DIAGNOSIS` | Reproduction and root-cause evidence | `bug-diagnosis` |
+| `PERFORMANCE_OPTIMIZATION` | Measured performance bottleneck | `performance-optimization` |
+| `UI_UX_REVIEW` | Visual, responsive, accessibility, or usability review | `ui-ux-review` |
+| `SAFE_VERIFICATION` | Read-only QA, regression, compliance, or release evidence | `safe-verification` |
+| `INSTRUCTION_SYSTEM_MAINTENANCE` | `replit.md`, `ai/**`, or `.agents/skills/**` | `instruction-maintenance` |
 
 The selected internal mode is a trace label, not user input or authority. Select it again for each phase from the phase's actual outcome. If a specialized mode applies, prefer it over frontend, API, or full-stack general modes. HITL is never a mode.
 
@@ -185,7 +185,7 @@ Every final report must include `HITL Gate Result`, stating for each failing row
 
 ## 4. Route instructions
 
-Always read `ai/metco.md`. Read only triggered files:
+Always read the active profile's business file (e.g. `ai/metco.md` for the `metco` profile), if it has one. Read only triggered files:
 
 - React/client: `ai/frontend.md`
 - API/backend: `ai/backend.md`
@@ -257,28 +257,28 @@ Final report: outcome; files changed; ownership/reuse/creation decisions; checks
 
 Stop before accessing or changing protected content, unknown/production services, packages/config, generated contracts, unsupported public contracts, unauthorized schema/migration/seed files, destructive data, weakened security, or code with unresolved overwrite/deletion risk. Request only the smallest missing authorization or decision. When one of the three HITL cases applies, use the full-task pause and resume sequence above.
 
-## 9. METCO engine files
+## 9. Engine files
 
-If `metco-kit/tools/metco_contracts.py` and `metco-kit/tools/**` exist, treat them as the local engine contract for routing, capability gates, protected paths, template metadata, run state, and report parsing.
+If this engine's directory (see Section 2 for how to locate it - it may be named `metco-kit`, `replit-opsgate`, or something else) contains `tools/opsgate_contracts.py` and `tools/**`, treat them as the local engine contract for routing, capability gates, protected paths, template metadata, run state, and report parsing. The rest of this section writes its path as `<engine-dir>/` - substitute the directory you actually found.
 
 Use:
 
-- `metco-kit/tools/metco_contracts.py` to determine deliverable, mode, skill, references, bounded/phased execution, capability gates, protected paths, schemas, and distribution rules.
-- `metco-kit/tools/metco_fixtures.py` for validation fixtures and gold-standard examples.
-- `metco-kit/tools/route-request.py` when a structured request object or compatible request file is available.
-- `metco-kit/tools/compile-prompt.py` when a structured request should be converted into a Replit prompt.
-- `metco-kit/tools/intake-request.py` only as a cautious first pass for plain-language requests; do not invent high-risk paths or authorizations.
+- `<engine-dir>/tools/opsgate_contracts.py` to determine deliverable, mode, skill, references, bounded/phased execution, capability gates, protected paths, schemas, and distribution rules.
+- `<engine-dir>/tools/opsgate_fixtures.py` for validation fixtures and gold-standard examples.
+- `<engine-dir>/tools/route-request.py` when a structured request object or compatible request file is available.
+- `<engine-dir>/tools/compile-prompt.py` when a structured request should be converted into a Replit prompt.
+- `<engine-dir>/tools/intake-request.py` only as a cautious first pass for plain-language requests; do not invent high-risk paths or authorizations.
 
 The engine files guide routing and prompt generation. They do not grant write authority, bypass protected paths, or replace explicit user scope.
 
-If this `metco-kit` is running against a project other than the one it was originally built for, confirm a `METCO_PROFILE` environment variable is set (`generic-replit` if the project has no profile of its own yet - see `metco-kit/canonical/README-v6.md`) before relying on protected-path or scope results. Without it, the engine defaults to the original project's own paths, which do not apply here and should not be treated as this project's protections.
+If this engine is running against a project other than the one it was originally built for, confirm an `OPSGATE_PROFILE` environment variable is set (`generic-replit` if the project has no profile of its own yet - see `<engine-dir>/canonical/README-v6.md`) before relying on protected-path or scope results. Without it, the engine defaults to the original project's own paths, which do not apply here and should not be treated as this project's protections.
 
 ## 10. MCP tool availability
 
-Before running the Mandatory HITL Gate by hand, check whether this project has registered METCO's own gate tools as MCP tools (names conventionally prefixed `metco_` - `metco_check_capability`, `metco_check_paths`, `metco_preflight`, `metco_record_decision`, plus routing/lint tools). If they are available, call them directly instead of re-deriving the gate table in prose:
+Before running the Mandatory HITL Gate by hand, check whether this project has registered this engine's own gate tools as MCP tools (names conventionally prefixed `opsgate_` by default, configurable via the request's `mcp.tool_prefix` field - e.g. `opsgate_check_capability`, `opsgate_check_paths`, `opsgate_preflight`, `opsgate_record_decision`, plus routing/lint tools; an MCP server wired before the 6.0.13 generalization rename may still use the legacy `metco_` prefix). If they are available, call them directly instead of re-deriving the gate table in prose:
 
 - A deterministic gate (`capability_gate`, `protected_path_gate`, `scope_gate`) failing from a tool's response is reported the same way as the prose version - name the gate, state what's missing, stop. It is never a HITL decision.
 - Reserve the HITL decision format for ambiguity none of the tools can see (unknown next step, tied valid choices, a self-made scope-expanding decision) - these only surface during the work itself.
-- If a human answers a HITL question, call `metco_record_decision` with the HITL id and answer before resuming, so the decision is persisted outside the conversation.
+- If a human answers a HITL question, call `opsgate_record_decision` (or the legacy `metco_record_decision`, if that is the registered name) with the HITL id and answer before resuming, so the decision is persisted outside the conversation.
 
 Only fall back to the manual reasoning table in section 3 if a tool call errors or the MCP connection is unreachable, and say so explicitly in the Final Report when that happens - it means the gate ran on inference instead of a computed result. MCP tool availability changes how a gate result is obtained, never what the gate requires or what counts as protected, locked, or authorized.

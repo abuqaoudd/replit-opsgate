@@ -1,13 +1,13 @@
-# METCO Kit v6 Engine Foundation
+# Replit OpsGate v6 Engine Foundation
 
-This package converts the v6 METCO prompt kit into a single canonical kit with generated Claude and Replit distributions.
+This package converts the v6 prompt kit into a single canonical kit with generated Claude and Replit distributions.
 
 ## What changed
 
 - `canonical/` is the source of truth for instructions, templates, references, specifications, examples, and Claude skill sources.
-- `tools/metco_contracts.py` contains machine-readable routing, capability, protected-path, HITL, request, profile, schema, and distribution rules.
-- `tools/metco_fixtures.py` contains validation fixtures and gold-standard examples.
-- The kit no longer stores METCO-owned contracts, schemas, fixtures, package metadata, or release hashes as standalone `.json` files.
+- `tools/opsgate_contracts.py` contains machine-readable routing, capability, protected-path, HITL, request, profile, schema, and distribution rules.
+- `tools/opsgate_fixtures.py` contains validation fixtures and gold-standard examples.
+- The kit no longer stores the kit's own contracts, schemas, fixtures, package metadata, or release hashes as standalone `.json` files.
 - `tools/` contains the first engine commands for building, validating, and routing requests.
 - `fixtures/` contains sample routing and HITL cases used by validation.
 - `canonical/examples/gold-standard/` contains sample requests, HITL resume, and parseable final-report examples.
@@ -29,8 +29,8 @@ python3 tools/parse-report.py fixtures/reports/sample-replit-final-report.md
 python3 tools/intake-request.py "Audit the Roles module without changing code"
 python3 tools/next-phase-prompt.py state:ready-phased-state reports:parsed-sample-report
 python3 tools/build-replit-install.py
-python3 tools/diff-upgrade.py ../audit_unpack/metco-gpt-project-kit canonical
-python3 tools/release-notes.py ../audit_unpack/metco-gpt-project-kit
+python3 tools/diff-upgrade.py ../audit_unpack/old-kit-root canonical
+python3 tools/release-notes.py ../audit_unpack/old-kit-root
 python3 tools/preflight.py routing:frontend-task
 python3 tools/check-paths.py routing:frontend-task
 python3 tools/show-profile.py  # resolved active profile, roots, and protected paths - no request file required
@@ -71,11 +71,11 @@ Markdown remains the agent-facing instruction layer. Python contracts are the en
 
 Object-oriented instruction files make each domain rule set own a clear responsibility without granting authority. Routing, gates, protected paths, schemas, and distribution rules live in Python contracts and root instructions.
 
-The prompt compiler, state initializer, report parser, and upgrade diff command are intentionally simple first versions. They establish the engine contract and should become stricter as more real METCO requests are captured.
+The prompt compiler, state initializer, report parser, and upgrade diff command are intentionally simple first versions. They establish the engine contract and should become stricter as more real requests are captured.
 
 ## Hard gate enforcement
 
-The engine includes `tools/metco_contracts.py` plus enforcement tools:
+The engine includes `tools/opsgate_contracts.py` plus enforcement tools:
 
 - `preflight.py`
 - `check-paths.py`

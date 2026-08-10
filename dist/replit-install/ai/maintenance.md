@@ -1,4 +1,4 @@
-# METCO Instruction Maintenance Object
+# Instruction Maintenance Object
 
 Use when the router automatically selects `INSTRUCTION_SYSTEM_MAINTENANCE` from an explicit instruction-change request. Modify only the exact authorized `replit.md`, `ai/**`, and `.agents/skills/**` targets; do not modify application code.
 
@@ -25,7 +25,7 @@ Use this object only for explicit instruction-change requests routed to `INSTRUC
 ## Design
 
 - Root: precedence, scope, protection, automatic internal mode catalog, lifecycle, and permanent capability gates.
-- `ai/metco.md`: cross-project task record and evidence.
+- `ai/<profile>.md` (e.g. `ai/metco.md` for the `metco` profile): cross-project task record and evidence.
 - Domain files: non-duplicated domain rules.
 - Skills: short scenario workflows that reference root/domain files and never grant permission.
 

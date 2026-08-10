@@ -1,4 +1,4 @@
-# METCO Skill Routing Specification
+# Skill Routing Specification
 
 Specification version: 6
 
@@ -7,7 +7,7 @@ Specification version: 6
 - `ROUTE-001`: Select by immediate deliverable and observable outcome, never by a single keyword.
 - `ROUTE-002`: Users MUST NOT be asked to choose or name a mode, skill, complexity class, or execution profile.
 - `ROUTE-003`: Select one primary Replit scenario skill from the actual current write outcome.
-- `ROUTE-004`: Load only root instructions, `ai/metco.md`, triggered domain instruction objects, testing when applicable, and the selected skill.
+- `ROUTE-004`: Load only root instructions, the active profile's business file (e.g. `ai/metco.md`), if it has one, triggered domain instruction objects, testing when applicable, and the selected skill.
 - `ROUTE-005`: Multi-deliverable requests MUST preserve dependency order and return only requested artifacts.
 - `ROUTE-006`: Complex execution MUST generate only the next authorized phase prompt.
 - `ROUTE-007`: A skill choice MUST be recomputed when a later phase has a different write outcome.
@@ -39,20 +39,20 @@ Dependency order:
 
 | Outcome evidence | Primary skill |
 |---|---|
-| Ordinary React/client behavior | `metco-frontend-development` |
-| API route/service/repository behavior | `metco-api-server-development` |
-| Coordinated client and Replit backend feature | `metco-full-stack-feature` |
-| Authentication, authorization, tenant or permission behavior | `metco-auth-permission-workflow` |
-| Form state, validation, mutations, save/cancel | `metco-form-workflow` |
-| Tables, filtering, sorting, pagination, reporting | `metco-table-reporting-workflow` |
-| Broad frontend ownership or architectural consolidation | `metco-frontend-architecture-refactor` |
-| Schema, mapping, migration, backfill, compatibility | `metco-database-schema-migration` |
-| Deterministic non-production seed data | `metco-data-seeding` |
-| Unknown defect cause or evidence-only diagnosis | `metco-bug-diagnosis` |
-| Measured performance bottleneck | `metco-performance-optimization` |
-| Visual hierarchy, responsive behavior, accessibility | `metco-ui-ux-review` |
-| Read-only QA, regression, compliance, or verification | `metco-safe-verification` |
-| `replit.md`, `ai/**`, or `.agents/skills/**` changes | `metco-instruction-maintenance` |
+| Ordinary React/client behavior | `frontend-development` |
+| API route/service/repository behavior | `api-server-development` |
+| Coordinated client and Replit backend feature | `full-stack-feature` |
+| Authentication, authorization, tenant or permission behavior | `auth-permission-workflow` |
+| Form state, validation, mutations, save/cancel | `form-workflow` |
+| Tables, filtering, sorting, pagination, reporting | `table-reporting-workflow` |
+| Broad frontend ownership or architectural consolidation | `frontend-architecture-refactor` |
+| Schema, mapping, migration, backfill, compatibility | `database-schema-migration` |
+| Deterministic non-production seed data | `data-seeding` |
+| Unknown defect cause or evidence-only diagnosis | `bug-diagnosis` |
+| Measured performance bottleneck | `performance-optimization` |
+| Visual hierarchy, responsive behavior, accessibility | `ui-ux-review` |
+| Read-only QA, regression, compliance, or verification | `safe-verification` |
+| `replit.md`, `ai/**`, or `.agents/skills/**` changes | `instruction-maintenance` |
 
 ## 4. Tie-breaking
 

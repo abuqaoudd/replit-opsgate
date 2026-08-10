@@ -1,10 +1,10 @@
-# METCO Engine Foundation Specification
+# Engine Foundation Specification
 
 Specification version: 6
 
 ## 1. Purpose
 
-The engine foundation makes the METCO kit programmable without replacing the agent-facing Markdown. Markdown remains the instruction and artifact layer. Python contracts define the machine-readable contract used by routing, validation, building, and future prompt compilation.
+The engine foundation makes the kit programmable without replacing the agent-facing Markdown. Markdown remains the instruction and artifact layer. Python contracts define the machine-readable contract used by routing, validation, building, and future prompt compilation.
 
 ## 2. Source model
 
@@ -17,17 +17,17 @@ The engine foundation makes the METCO kit programmable without replacing the age
 
 | Contract | File |
 |---|---|
-| Kit release metadata | `tools/metco_contracts.py` |
-| Routing and skill selection | `tools/metco_contracts.py` |
-| Capability gates | `tools/metco_contracts.py` |
-| Protected and locked paths | `tools/metco_contracts.py` |
-| Request intake | `tools/metco_contracts.py` |
-| HITL decision shape | `tools/metco_contracts.py` |
-| Template metadata | `tools/metco_contracts.py` |
-| Run, phase, and handoff state | `tools/metco_contracts.py` |
-| Parsed final report | `tools/metco_contracts.py` |
-| Distribution build map | `tools/metco_contracts.py` |
-| Project profiles | `tools/metco_contracts.py` |
+| Kit release metadata | `tools/opsgate_contracts.py` |
+| Routing and skill selection | `tools/opsgate_contracts.py` |
+| Capability gates | `tools/opsgate_contracts.py` |
+| Protected and locked paths | `tools/opsgate_contracts.py` |
+| Request intake | `tools/opsgate_contracts.py` |
+| HITL decision shape | `tools/opsgate_contracts.py` |
+| Template metadata | `tools/opsgate_contracts.py` |
+| Run, phase, and handoff state | `tools/opsgate_contracts.py` |
+| Parsed final report | `tools/opsgate_contracts.py` |
+| Distribution build map | `tools/opsgate_contracts.py` |
+| Project profiles | `tools/opsgate_contracts.py` |
 | Instruction object guidance | `canonical/specifications/OBJECT_ORIENTED_INSTRUCTIONS_SPEC.md` |
 
 ## 4. Required tools

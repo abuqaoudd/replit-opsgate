@@ -1,4 +1,4 @@
-# METCO Refactoring Instruction Object
+# Refactoring Instruction Object
 
 Read for behavior-preserving refactors, consolidation, moves, dead-code cleanup, oversized-file remediation, or architecture work.
 

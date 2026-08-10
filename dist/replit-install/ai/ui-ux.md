@@ -1,4 +1,4 @@
-# METCO UI/UX Instruction Object
+# UI/UX Instruction Object
 
 Applies to visible work inside this project's frontend source root (see `replit.md` §2).
 
@@ -26,7 +26,7 @@ Use this object when a selected frontend workflow changes visible UI, layout, in
 
 Inspect and reuse existing shell/header, buttons/actions, form controls, filters/search, tables/pagination, dialogs/drawers, feedback states, badges/cards/tabs/menus, icons, tokens, spacing, typography, color, radius, shadow, and breakpoints. Do not create a second design system or page-local copy.
 
-Preserve established METCO visual identity and icon library. No production emojis, unrelated gradients/glass/neon, excessive decoration, mixed styling systems, arbitrary values, static inline styles, or global fixes for local problems.
+Preserve this project's established visual identity and icon library (see the active profile's business file, e.g. `ai/metco.md`, for the specifics). No production emojis, unrelated gradients/glass/neon, excessive decoration, mixed styling systems, arbitrary values, static inline styles, or global fixes for local problems.
 
 ## Interaction
 
@@ -46,7 +46,7 @@ Use semantic controls, visible labels, accessible names, keyboard operation, vis
 ## Workflow
 
 1. Inspect existing UI patterns and pick reuse, configuration, or narrow extension before creation.
-2. Preserve METCO visual identity, hierarchy, density, interaction placement, and business language.
+2. Preserve this project's visual identity, hierarchy, density, interaction placement, and business language.
 3. Cover applicable loading, empty, no-results, error/retry, permission, pending, success, conflict, and confirmation states.
 4. Verify responsive behavior around 375px, 768px, and 1280px.
 5. Verify semantic controls, labels, focus, keyboard flow, table/dialog semantics, contrast, and non-color status cues.

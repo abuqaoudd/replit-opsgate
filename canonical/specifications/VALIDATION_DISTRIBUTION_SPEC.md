@@ -1,4 +1,4 @@
-# METCO Validation and Distribution Specification
+# Validation and Distribution Specification
 
 Specification version: 6
 
@@ -9,11 +9,11 @@ Specification version: 6
 | `references/replit.md` | Both Claude skill `references/replit.md` |
 | `references/ai/**` | Replit task-builder `references/ai/**` |
 | `references/replit-skills/**` | Replit task-builder `references/replit-skills/**` |
-| `templates/METCO_REPLIT_TASK_TEMPLATE.md` | Task-builder `task-template.md`; router `replit-task-template.md` |
-| `templates/METCO_REPLIT_PHASED_IMPLEMENTATION_TEMPLATE.md` | Both skill phase-template references |
-| `templates/METCO_HITL_DECISION_TEMPLATE.md` | Both skill HITL references |
+| `templates/REPLIT_TASK_TEMPLATE.md` | Task-builder `task-template.md`; router `replit-task-template.md` |
+| `templates/REPLIT_PHASED_IMPLEMENTATION_TEMPLATE.md` | Both skill phase-template references |
+| `templates/HITL_DECISION_TEMPLATE.md` | Both skill HITL references |
 | Other artifact templates | Router template references |
-| `templates/METCO_PROMPT_REQUEST_FORM.md` | Both skills’ `request-form.md` |
+| `templates/PROMPT_REQUEST_FORM.md` | Both skills’ `request-form.md` |
 | `specifications/PROCESS_MODES_SPEC.md` | Both skills’ `process-modes-spec.md` |
 | `specifications/SKILL_ROUTING_SPEC.md` | Router `routing-spec.md` |
 | `specifications/ARTIFACT_CONTRACTS_SPEC.md` | Router `artifact-contracts-spec.md` |

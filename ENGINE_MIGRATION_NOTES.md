@@ -2,7 +2,7 @@
 
 ## Goal
 
-Move METCO from a document-only prompt kit toward a Replit-ready orchestration engine.
+Move the underlying prompt kit from a document-only format toward a Replit-ready orchestration engine, reusable across any Replit project (METCO was the first adopting project).
 
 ## Principle
 
@@ -23,8 +23,8 @@ Generated outputs live under `dist/` and should be rebuilt with `python3 tools/b
 
 ## Current engine contracts
 
-- `tools/metco_contracts.py`: deliverable routing, mode/skill/reference mapping, phased-routing rules, capability gates, protected paths, request/report/HITL schemas, distribution mappings, profiles, template metadata, run state, and hard gate registry.
-- `tools/metco_fixtures.py`: routing, HITL, state, parsed-report, and gold-standard fixture data used by validation.
+- `tools/opsgate_contracts.py`: deliverable routing, mode/skill/reference mapping, phased-routing rules, capability gates, protected paths, request/report/HITL schemas, distribution mappings, profiles, template metadata, run state, and hard gate registry.
+- `tools/opsgate_fixtures.py`: routing, HITL, state, parsed-report, and gold-standard fixture data used by validation.
 
 ## Markdown cleanup strategy
 

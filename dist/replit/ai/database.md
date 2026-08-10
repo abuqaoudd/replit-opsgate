@@ -1,4 +1,4 @@
-# METCO Data, Migration, and Seeding Instruction Object
+# Data, Migration, and Seeding Instruction Object
 
 Read for persisted-data work in the Replit-owned backend.
 
