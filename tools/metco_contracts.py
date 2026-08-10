@@ -1,7 +1,7 @@
 # Generated METCO Python contracts. Edit this file instead of standalone JSON manifests.
 
 KIT_MANIFEST = {'name': 'metco-kit',
- 'version': '6.0.7',
+ 'version': '6.0.8',
  'release_date': '2026-08-10',
  'source_version': '6',
  'purpose': 'Canonical METCO prompt, skill, and Replit engine foundation kit with object-oriented instruction '

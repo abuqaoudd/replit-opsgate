@@ -138,22 +138,35 @@ The Per-Action Gate checks the same three cases as the Mandatory HITL Gate, at f
 
 ### Mandatory HITL Gate (per phase and final report)
 
+Every row below is checked the same way, but two different kinds of failure resolve differently, and only one of them is actually a HITL case:
+
+- **Deterministic** rows have one correct answer and no judgment involved — a failure means an explicit authorization, evidence, or scope grant is missing. Name the gate, state exactly what is missing, and stop. This is a blocked task, not a decision request — there is nothing to choose between, so never use the `DECIDE` reply format for one of these.
+- **Judgment** rows are the three real HITL cases from the section above (unknown next step, two tied valid options, self-made scope-expanding decision) — only these use the HITL decision-required format.
+
 Before editing, before each phase, and before final report, complete this gate explicitly:
 
-| Check | Answer | Evidence |
-|---|---|---|
-| Is the exact owner/path known? | YES/NO | |
-| Is the write scope explicitly authorized? | YES/NO | |
-| Are protected paths excluded? | YES/NO | |
-| Are package/config/schema/seed/destructive changes needed? | YES/NO | |
-| If risky changes are needed, are they explicitly authorized? | YES/NO/NA | |
-| Are there two materially valid implementation choices? | YES/NO | |
-| Would proceeding require inventing a business rule, permission rule, data rule, or API contract? | YES/NO | |
-| Is verification possible in a safe environment? | YES/NO | |
+| Check | Kind | Answer | Evidence |
+|---|---|---|---|
+| Is the exact owner/path known? | Judgment | YES/NO | |
+| Is the write scope explicitly authorized? | Deterministic | YES/NO | |
+| Are protected paths excluded? | Deterministic | YES/NO | |
+| Are package/config/schema/seed/destructive changes needed? | Deterministic | YES/NO | |
+| If risky changes are needed, are they explicitly authorized? | Deterministic | YES/NO/NA | |
+| Are there two materially valid implementation choices? | Judgment | YES/NO | |
+| Would proceeding require inventing a business rule, permission rule, data rule, or API contract? | Judgment | YES/NO | |
+| Is verification possible in a safe environment? | Deterministic | YES/NO | |
 
-Stop immediately if any required answer is `NO`, any risky answer is `YES` without explicit authorization, two valid choices remain, or proceeding requires invented business/data/security/API behavior.
+Stop immediately on any failing row. If every failing row is Deterministic, name each one and the exact grant it needs, then stop:
 
-If blocked, return only:
+```text
+# Gate blocked
+
+Blocked gate: name the exact failed gate (scope_gate / capability_gate / protected_path_gate / verification_gate)
+Missing: the exact authorization, evidence, or scope change needed to pass
+Effect: task remains paused until that authorization is explicitly granted — this is not a HITL question and does not use the DECIDE reply format
+```
+
+If any failing row is Judgment — it takes priority when both kinds fail together — return only:
 
 ```text
 # HITL decision required
@@ -169,7 +182,7 @@ Exact resume point: phase/step to resume after a valid DECIDE reply
 Required reply: DECIDE HITL-id: answer and exact scope
 ```
 
-Every final report must include `HITL Gate Result`. A report without that section is incomplete. The final report must also confirm the Per-Action Gate ran before every action taken during the task, not only reconstruct its answers afterward — if any per-action check was skipped, say so explicitly rather than omitting it.
+Every final report must include `HITL Gate Result`, stating for each failing row whether it resolved as Gate Blocked (Deterministic) or HITL decision (Judgment). A report without that section is incomplete. The final report must also confirm the Per-Action Gate ran before every action taken during the task, not only reconstruct its answers afterward — if any per-action check was skipped, say so explicitly rather than omitting it.
 
 ## 4. Route instructions
 

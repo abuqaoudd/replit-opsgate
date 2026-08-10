@@ -338,13 +338,22 @@ def cmd_preflight(argv):
             token = normalize_pattern(pattern).rstrip("/")
             if token and (token in candidate or candidate.startswith(token)):
                 failed_gates.append(f"protected_path_gate: {candidate}")
+    # Every gate this function checks - scope, capability, protected-path - is deterministic:
+    # a fixed rule evaluated against the request, with one correct answer and no judgment
+    # involved. None of them is a HITL case. A failure here means "explicit authorization or
+    # scope is missing," not "a human must choose between options." Treat every gate the same
+    # way: name it, say what it needs, and stop - do not route any of them through the HITL
+    # decision-required ceremony, which is reserved for the three genuine ambiguity cases
+    # (unknown next step, tied valid options, self-made scope-expanding decision) that can only
+    # be discovered during actual work, not from a request file before anything has been touched.
     result = {
         "request_id": request.get("id"),
         "route": route,
         "gates_version": gates.get("version"),
         "can_proceed": len(failed_gates) == 0,
         "failed_gates": unique(failed_gates),
-        "required_human_decision": len(failed_gates) > 0,
+        "blocked": len(failed_gates) > 0,
+        "blocked_gate_kind": "deterministic" if failed_gates else None,
         "evidence": evidence,
     }
     print_json(result)
@@ -372,6 +381,14 @@ B. option label - exact scope effect
 Exact resume point: phase/step to resume after a valid DECIDE reply
 Required reply: DECIDE HITL-id: answer and exact scope"""
 
+DETERMINISTIC_BLOCK_DECISION = """If a Deterministic row fails, do not use the HITL decision format above - there is nothing to decide between, only something to grant. Return only:
+
+# Gate blocked
+
+Blocked gate: name the exact failed gate (scope_gate / capability_gate / protected_path_gate / verification_gate)
+Missing: the exact authorization, evidence, or scope change needed to pass
+Effect: task remains paused until that authorization is explicitly granted - this is not a HITL question and does not use the DECIDE reply format"""
+
 
 def mandatory_hitl_gate(request=None):
     mcp = (request or {}).get("mcp") or {}
@@ -380,36 +397,43 @@ def mandatory_hitl_gate(request=None):
 
 Also run the lighter Per-Action Gate from replit.md before every individual step in the Execution section below - it checks the same three cases at finer grain and does not replace this table at the checkpoints where the table is required.
 
+Every row below gets checked the same way, but two different kinds of failure resolve differently. A Deterministic row has one correct answer and no judgment involved - failing it means an authorization or scope grant is missing, not that a decision needs making. A Judgment row is one of the three real HITL cases (unknown next step, two tied valid options, or a self-made choice that would expand scope) - only these use the HITL decision format.
+
 Before editing, before each phase, and before final report, answer this gate explicitly:
 
-| Check | Answer | Evidence |
-|---|---|---|
-| Is the exact owner/path known? | YES/NO | |
-| Is the write scope explicitly authorized? | YES/NO | |
-| Are protected paths excluded? | YES/NO | |
-| Are package/config/schema/seed/destructive changes needed? | YES/NO | |
-| If risky changes are needed, are they explicitly authorized? | YES/NO/NA | |
-| Are there two materially valid implementation choices? | YES/NO | |
-| Would proceeding require inventing a business rule, permission rule, data rule, or API contract? | YES/NO | |
-| Is verification possible in a safe environment? | YES/NO | |
+| Check | Kind | Answer | Evidence |
+|---|---|---|---|
+| Is the exact owner/path known? | Judgment | YES/NO | |
+| Is the write scope explicitly authorized? | Deterministic | YES/NO | |
+| Are protected paths excluded? | Deterministic | YES/NO | |
+| Are package/config/schema/seed/destructive changes needed? | Deterministic | YES/NO | |
+| If risky changes are needed, are they explicitly authorized? | Deterministic | YES/NO/NA | |
+| Are there two materially valid implementation choices? | Judgment | YES/NO | |
+| Would proceeding require inventing a business rule, permission rule, data rule, or API contract? | Judgment | YES/NO | |
+| Is verification possible in a safe environment? | Deterministic | YES/NO | |
 
-Stop immediately if any required answer is NO, any risky answer is YES without explicit authorization, two valid choices remain, or proceeding requires invented business/data/security/API behavior.
+Stop immediately on any failing row. If every failing row is Deterministic, name each one and the exact grant it needs using the block below - do not invent options or a DECIDE-style question for a row with nothing to choose between. If any failing row is Judgment, use the HITL decision format instead; it takes priority when both kinds fail together.
+
+{DETERMINISTIC_BLOCK_DECISION}
 
 {HITL_DECISION_BLOCK}"""
 
     prefix = mcp.get("tool_prefix", "metco_")
     return f"""## Mandatory HITL Gate (per phase and final report) - MCP mode
 
-MCP tools are registered for this project. Before editing, before each phase, and before final report, call these tools directly instead of re-deriving the gate table by hand each time:
+MCP tools are registered for this project. Before editing, before each phase, and before final report, call these tools directly instead of re-deriving the gate table by hand each time. Treat every gate the same way - name it, state what's missing, stop - and reserve the HITL decision format for genuine judgment ambiguity only, never for a named gate that just needs authorization:
 
-1. Call `{prefix}check_capability` with this request's authorizations. If it returns `can_proceed: false`, stop and report the missing capability/evidence as blocked - do not implement.
-2. Call `{prefix}check_paths` with this request's scope. If it reports a protected-path violation, stop immediately and do not touch those paths.
-3. Call `{prefix}preflight` with the full request before the first edit, before each phase, and again immediately before the final report. If `can_proceed` is false or `required_human_decision` is true, stop and return only the HITL decision block below, using the tool's own `evidence` field.
-4. If a human answers a HITL question, call `{prefix}record_decision` with the HITL id and the answer before resuming, so the decision is persisted outside this conversation.
+1. Call `{prefix}check_capability` with this request's authorizations. `can_proceed: false` is a Deterministic `capability_gate` failure - report the missing capability/evidence as blocked and stop using the Gate Blocked format below. This is not a HITL decision; there is nothing to choose between.
+2. Call `{prefix}check_paths` with this request's scope. A reported protected-path violation is a Deterministic `protected_path_gate` failure - name the exact path, stop, use the same Gate Blocked format. Do not touch those paths.
+3. Call `{prefix}preflight` with the full request before the first edit, before each phase, and again immediately before the final report. Every gate it can name in `failed_gates` is Deterministic by construction - `preflight` only inspects the request file, so it cannot detect real ambiguity. If `can_proceed` is false, name each failed gate from the response using the Gate Blocked format, not the HITL format.
+4. Reserve the HITL decision format for ambiguity none of the tools above can see: an owner/path that stays unknown after bounded inspection, two implementation choices with no governing rule between them, or a step that would require inventing a business/data/security/API rule. These only surface during the work itself, never from the request file alone.
+5. If a human answers a HITL question, call `{prefix}record_decision` with the HITL id and the answer before resuming, so the decision is persisted outside this conversation.
 
-Only fall back to the manual eight-row reasoning table (owner/path known, scope authorized, protected paths excluded, risky change authorized, no two-valid-choices ambiguity, no invented business/data/security/API rule, verification possible) if a tool call errors or the MCP connection is unreachable - state that explicitly in the Final Report if it happens, since it means the gate ran on inference instead of a computed result.
+{DETERMINISTIC_BLOCK_DECISION}
 
-{HITL_DECISION_BLOCK}"""
+{HITL_DECISION_BLOCK}
+
+Only fall back to the manual eight-row reasoning table if a tool call errors or the MCP connection is unreachable - state that explicitly in the Final Report if it happens, since it means the gate ran on inference instead of a computed result."""
 
 
 def per_action_gate_line(request=None):

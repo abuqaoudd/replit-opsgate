@@ -1,7 +1,7 @@
 # METCO package metadata stored as Python.
 
 PACKAGE = {'name': 'metco-kit-engine-foundation',
- 'version': '6.0.7',
+ 'version': '6.0.8',
  'private': True,
  'type': 'module',
  'scripts': {'build': 'python3 tools/build-distributions.py',
