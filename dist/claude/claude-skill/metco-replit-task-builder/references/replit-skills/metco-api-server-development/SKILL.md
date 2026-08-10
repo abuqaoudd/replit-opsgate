@@ -1,6 +1,6 @@
 ---
 name: metco-api-server-development
-description: Implement or debug bounded METCO Replit API routes, middleware, validation, services, repositories, authorization, errors, logging, and persistence in artifacts/api-server/src. Use for backend-only endpoint behavior; use a more specific auth, debugging, performance, full-stack, migration, or seeding skill when that is the primary scenario.
+description: Implement or debug bounded Replit API routes, middleware, validation, services, repositories, authorization, errors, logging, and persistence in this project's backend source root. Use for backend-only endpoint behavior; use a more specific auth, debugging, performance, full-stack, migration, or seeding skill when that is the primary scenario.
 ---
 
 # METCO API Server Development

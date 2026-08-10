@@ -10,11 +10,10 @@ Apply: platform/safety → this file → routed `ai/**` → applicable `.agents/
 
 ## 2. Scope
 
-Normal application writes are limited to:
+Normal application writes are limited to this project's own frontend and backend source roots, plus directly related tests inside those trees. Never assume a specific project's folder names - resolve the actual roots in this order:
 
-- Frontend: `artifacts/metco/src/**`
-- Replit backend: `artifacts/api-server/src/**`
-- Directly related tests inside those trees
+1. If `metco-kit/tools/**` is present, run `python3 metco-kit/tools/show-profile.py` (or read the active profile from `metco-kit/tools/metco_contracts.py`'s `PROFILES`) to get this project's `frontend_root` and `backend_root`. `METCO_PROFILE` (env var) or a `"profile"` field on a request selects the profile explicitly; without either, the default is `generic-replit`, whose roots are unset until a project-specific profile is added for this project.
+2. If the resolved roots are unset, or `metco-kit` is not present at all, use only the exact paths the current task explicitly authorizes as write scope - never guess a folder name from convention or from another project.
 
 Default deny everything else. Read supporting Python contracts or named contracts only when needed and never edit them without explicit authority for the exact target.
 

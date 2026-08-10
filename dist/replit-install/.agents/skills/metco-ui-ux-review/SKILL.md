@@ -1,6 +1,6 @@
 ---
 name: metco-ui-ux-review
-description: Audit or improve METCO visible interfaces in artifacts/metco/src for design-system reuse, hierarchy, density, forms, tables, complex builders, feedback states, responsiveness, accessibility, and role-aware actions. Use for UI-focused work; remain read-only for recommendations and implement changes only when explicitly requested.
+description: Audit or improve visible interfaces in this project's frontend source root for design-system reuse, hierarchy, density, forms, tables, complex builders, feedback states, responsiveness, accessibility, and role-aware actions. Use for UI-focused work; remain read-only for recommendations and implement changes only when explicitly requested.
 ---
 
 # METCO UI/UX Review

@@ -154,9 +154,14 @@ def route_request(request):
         if capability != (replit or {}).get("capability") and capability in gates and auth.get("authorized") is False:
             missing_authority.extend(gates[capability].get("requires", []))
 
+    profile_record = read_json("manifests/profiles.json").get("profiles", {}).get(profile, {})
     result = {
         "request_id": request.get("id"),
         "profile": profile,
+        # frontend_root/backend_root are per-profile data, not universal facts - resolved here
+        # so any caller (a compiled prompt, an MCP tool response, a human) can see this
+        # request's actual write roots without hardcoding a specific project's paths.
+        "profile_roots": {"frontend_root": profile_record.get("frontend_root"), "backend_root": profile_record.get("backend_root")},
         "deliverable": artifact.get("deliverable"),
         "artifact_mode": artifact.get("mode"),
         "template": artifact.get("template"),
@@ -334,6 +339,25 @@ def normalize_pattern(pattern):
 def matches_protected(candidate, protected_pattern):
     needle = normalize_pattern(protected_pattern).rstrip("/")
     return candidate == needle or candidate.startswith(f"{needle}/") or f"/{needle}/" in candidate or needle in candidate
+
+
+def cmd_show_profile(argv):
+    """Print the resolved active profile in full - name, roots, and protected paths - with no
+    request file required. Exists so a human or an agent can answer "what project am I actually
+    configured for right now" in one command instead of reading METCO_PROFILE, profiles.json,
+    and protected-paths.json by hand. Accepts an optional request.json argument only to honor an
+    explicit "profile" field on it; every other request field is ignored."""
+    request = load_request(argv[0]) if argv else {}
+    profile = active_profile(request)
+    profiles = read_json("manifests/profiles.json").get("profiles", {})
+    print_json(
+        {
+            "resolved_profile": profile,
+            "resolved_from": "METCO_PROFILE env var" if os.environ.get("METCO_PROFILE") in profiles else ("request.profile field" if request.get("profile") in profiles else "manifests/profiles.json default_profile"),
+            "profile_record": profiles.get(profile, {}),
+            "protected_paths": protected_paths_for(request),
+        }
+    )
 
 
 def cmd_check_paths(argv):
@@ -572,7 +596,7 @@ Use each object's Responsibility, Inputs, Must Not, Workflow, and Output Evidenc
 |---|---|
 | Write | {", ".join(scope.get("write_paths") or []) or "No write paths authorized"} |
 | Minimum read-only | {", ".join(scope.get("read_paths") or []) or "Only direct owners, callers, and tests needed for the task"} |
-| Never access | metco-api/**, pipeline/**, resolved aliases, protected generated or production systems |
+| Never access | {", ".join(protected_paths_for(request).get("never_access", [])) or "No never_access paths configured for the active profile"}, resolved aliases, protected generated or production systems |
 
 Must remain unchanged:
 
@@ -1543,6 +1567,18 @@ def cmd_test_all(argv):
     # 6. Light smoke test of the run-state helpers; clean up the runs/ directory afterward so
     #    repeat runs don't leave residue behind.
     try_run("intake-request", "intake-request", ["Audit the Roles module without changing code"])
+    try_run("show-profile (default)", "show-profile", [])
+    default_profile_out = json.loads(capture_python("show-profile", []))
+    if default_profile_out.get("resolved_profile") != metco_contracts.PROFILES.get("default_profile"):
+        record("show-profile matches default_profile", False, f"expected {metco_contracts.PROFILES.get('default_profile')}, got {default_profile_out.get('resolved_profile')}")
+    else:
+        record("show-profile matches default_profile", True)
+    os.environ["METCO_PROFILE"] = "generic-replit"
+    try:
+        generic_out = json.loads(capture_python("show-profile", []))
+        record("show-profile honors METCO_PROFILE override", generic_out.get("resolved_profile") == "generic-replit", str(generic_out.get("resolved_profile")))
+    finally:
+        del os.environ["METCO_PROFILE"]
     try_run("init-run", "init-run", ["fixtures/routing/frontend-task.json"])
     try_run("next-phase-prompt", "next-phase-prompt", ["state:ready-phased-state", "reports:parsed-sample-report"])
     try_run("record-decision", "record-decision", ["HITL-example-P1-Q1", "Use the approved feature owner only"])
@@ -1577,6 +1613,7 @@ COMMANDS = {
     "record-decision": cmd_record_decision,
     "release-notes": cmd_release_notes,
     "route-request": cmd_route_request,
+    "show-profile": cmd_show_profile,
     "test-all": cmd_test_all,
     "validate-json": cmd_validate_json,
     "validate-kit": cmd_validate_kit,

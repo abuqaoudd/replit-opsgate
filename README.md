@@ -33,6 +33,7 @@ python3 tools/diff-upgrade.py ../audit_unpack/metco-gpt-project-kit canonical
 python3 tools/release-notes.py ../audit_unpack/metco-gpt-project-kit
 python3 tools/preflight.py routing:frontend-task
 python3 tools/check-paths.py routing:frontend-task
+python3 tools/show-profile.py  # resolved active profile, roots, and protected paths - no request file required
 python3 tools/check-capabilities.py routing:migration-task-missing-auth
 python3 tools/lint-prompt.py fixtures/prompts/frontend-compiled-with-gate.md
 python3 tools/lint-report.py fixtures/reports/sample-replit-final-report.md

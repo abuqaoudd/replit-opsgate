@@ -76,9 +76,8 @@ Read `specifications/PROCESS_MODES_SPEC.md` when routing is ambiguous or the mod
 
 Every generated prompt must enforce:
 
-- Never access, list, search, inspect, test, reference, or modify `metco-api/**`, `pipeline/**`, or resolved aliases of them.
-- Normal frontend writes stay in `artifacts/metco/src/**`.
-- Normal Replit-backend writes stay in `artifacts/api-server/src/**`.
+- Never access, list, search, inspect, test, reference, or modify any path the target project's active profile marks `never_access` (or, absent a profile, any path the user has marked protected), including resolved aliases of them.
+- Normal frontend and backend writes stay inside the target project's own frontend/backend source roots - resolve these from its active profile (`metco-kit`'s `PROFILES`/`show-profile.py` when present) or from the task's explicitly authorized scope; never assume one project's folder names apply to another.
 - Packages, lockfiles, dependencies, config, environment, deployment, CI/CD, generated files, schema, migrations, seeds, and instruction files are locked unless the user explicitly authorizes the exact capability and paths and root gates permit it.
 - Preserve pre-existing user work with scoped Git status and diff checks.
 - A selected mode or skill never grants or broadens authority.

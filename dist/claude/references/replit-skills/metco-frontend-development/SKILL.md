@@ -1,6 +1,6 @@
 ---
 name: metco-frontend-development
-description: Implement or debug a bounded METCO React/TypeScript page, component, hook, route, state, style, or client behavior in artifacts/metco/src. Use for ordinary frontend-only work requiring reuse discovery, correct ownership, strict typing, established styling, UI states, and scoped verification; not broad architecture refactors.
+description: Implement or debug a bounded React/TypeScript page, component, hook, route, state, style, or client behavior in this project's frontend source root. Use for ordinary frontend-only work requiring reuse discovery, correct ownership, strict typing, established styling, UI states, and scoped verification; not broad architecture refactors.
 ---
 
 # METCO Frontend Development

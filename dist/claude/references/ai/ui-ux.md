@@ -1,6 +1,6 @@
 # METCO UI/UX Instruction Object
 
-Applies to visible work in `artifacts/metco/src/**`.
+Applies to visible work inside this project's frontend source root (see `replit.md` §2).
 
 ## Responsibility
 

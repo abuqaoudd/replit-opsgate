@@ -1,7 +1,7 @@
 # Generated METCO Python contracts. Edit this file instead of standalone JSON manifests.
 
 KIT_MANIFEST = {'name': 'metco-kit',
- 'version': '6.0.12',
+ 'version': '6.0.13',
  'release_date': '2026-08-10',
  'source_version': '6',
  'purpose': 'Canonical METCO prompt, skill, and Replit engine foundation kit with object-oriented instruction '
@@ -27,7 +27,8 @@ KIT_MANIFEST = {'name': 'metco-kit',
               'lint_report': 'python3 tools/lint-report.py <report.md>',
               'audit_engine': 'python3 tools/audit-engine.py [project-root]',
               'init_run': 'python3 tools/init-run.py <request.json>',
-              'record_decision': 'python3 tools/record-decision.py <HITL-ID> <answer and exact scope>'},
+              'record_decision': 'python3 tools/record-decision.py <HITL-ID> <answer and exact scope>',
+              'show_profile': 'python3 tools/show-profile.py [request.json]'},
  'release_acceptance': ['canonical distribution mappings pass',
                         'Replit skill metadata is valid',
                         'protected path rules remain present',
@@ -359,16 +360,21 @@ DISTRIBUTIONS = {'claude': {'root': 'dist/claude',
                        ['canonical/references/ai', 'dist/replit/ai'],
                        ['canonical/references/replit-skills', 'dist/replit/.agents/skills']]}}
 
-PROFILES = {'default_profile': 'metco',
- 'profiles': {'metco': {'description': 'METCO Replit frontend and Replit-backend project profile.',
+# default_profile is generic-replit, not metco: this engine is meant to be reused across
+# whichever Replit project a submodule of it gets dropped into, and METCO is one specific
+# project that happens to use it - not the engine's own identity. The one project that
+# actually is METCO must opt in explicitly (METCO_PROFILE=metco, or a "profile" field on the
+# request) rather than every other adopting project needing to opt out.
+PROFILES = {'default_profile': 'generic-replit',
+ 'profiles': {'metco': {'description': 'METCO Replit frontend and Replit-backend project profile. Select explicitly (METCO_PROFILE=metco or request.profile) - it is no longer the default.',
                         'frontend_root': 'artifacts/metco/src',
                         'backend_root': 'artifacts/api-server/src',
                         'protected_policy': 'metco',
                         'test_policy': 'risk_based_existing_scripts_only',
                         'distribution': 'replit'},
-              'generic-replit': {'description': 'Starter profile for adapting the engine to another Replit project.',
-                                 'frontend_root': 'src',
-                                 'backend_root': 'server',
+              'generic-replit': {'description': "Default profile for any Replit project this kit is dropped into. frontend_root/backend_root are left unset (None) rather than guessed, since assuming a wrong folder name silently is worse than admitting it is not yet configured - set them by adding a project-specific profile (see canonical/README-v6.md) once the project's real roots are known.",
+                                 'frontend_root': None,
+                                 'backend_root': None,
                                  'protected_policy': 'project_defined',
                                  'test_policy': 'risk_based_existing_scripts_only',
                                  'distribution': 'replit'}}}

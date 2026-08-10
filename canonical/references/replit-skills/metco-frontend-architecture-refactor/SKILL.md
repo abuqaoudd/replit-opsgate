@@ -1,6 +1,6 @@
 ---
 name: metco-frontend-architecture-refactor
-description: Perform an explicitly approved METCO frontend architecture refactor in artifacts/metco/src. Use for broad component consolidation, oversized pages, incorrect placement, duplicate hooks/services/types, static-style cleanup, and verified dead-code removal requiring baseline metrics, classification, reuse mapping, phased batches, and behavior comparison.
+description: Perform an explicitly approved frontend architecture refactor in this project's frontend source root. Use for broad component consolidation, oversized pages, incorrect placement, duplicate hooks/services/types, static-style cleanup, and verified dead-code removal requiring baseline metrics, classification, reuse mapping, phased batches, and behavior comparison.
 ---
 
 # METCO Frontend Architecture Refactor

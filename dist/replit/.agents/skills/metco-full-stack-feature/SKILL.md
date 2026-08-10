@@ -1,6 +1,6 @@
 ---
 name: metco-full-stack-feature
-description: Deliver a bounded METCO feature spanning artifacts/api-server/src and artifacts/metco/src while preserving the existing API contract. Use for coordinated backend validation/authorization plus frontend consumption, role-aware UI, integrated states, and end-to-end verification; not schema changes unless separately authorized.
+description: Deliver a bounded feature spanning this project's backend and frontend source roots while preserving the existing API contract. Use for coordinated backend validation/authorization plus frontend consumption, role-aware UI, integrated states, and end-to-end verification; not schema changes unless separately authorized.
 ---
 
 # METCO Full-Stack Feature

@@ -78,8 +78,8 @@ Loaded route references act as instruction objects. Their `Responsibility`, `Act
 
 ## Non-negotiable scope
 
-- Never access or reference `metco-api/**`, `pipeline/**`, or aliases resolving to them.
-- Normal writes: frontend `artifacts/metco/src/**`; backend `artifacts/api-server/src/**`.
+- Never access or reference any path the target project's active profile marks `never_access` (or, absent a profile, any path the user marks protected), or aliases resolving to them.
+- Normal writes: the target project's own frontend/backend source roots, resolved from its active profile (`metco-kit`'s `PROFILES`/`show-profile.py`) or from the task's explicitly authorized scope - never a fixed path assumed from a different project.
 - Keep packages, dependencies, config, environment, deployment, generated files, schema, migrations, seeds, and instructions locked unless explicit user authorization and root capability gates permit exact paths.
 - Preserve pre-existing work and require scoped Git evidence.
 - A selected mode or skill never grants or broadens authority.

@@ -1,6 +1,6 @@
 ---
 name: metco-form-workflow
-description: Build or repair a METCO create/edit form, multi-step workflow, validation flow, dialog/drawer form, or mutation feedback experience in artifacts/metco/src, with optional existing-backend integration. Use when form state, payload mapping, duplicate submission, errors, permissions, and accessibility are central.
+description: Build or repair a create/edit form, multi-step workflow, validation flow, dialog/drawer form, or mutation feedback experience in this project's frontend source root, with optional existing-backend integration. Use when form state, payload mapping, duplicate submission, errors, permissions, and accessibility are central.
 ---
 
 # METCO Form Workflow
