@@ -7,7 +7,7 @@ description: Implement or debug a bounded METCO React/TypeScript page, component
 
 Automatically select internal mode `FRONTEND_IMPLEMENTATION`. This selects procedure, not authority.
 
-Before numbered workflow steps, run the Mandatory HITL Gate from `../../../replit.md`. Do not edit, start a phase, or final-report until the gate passes or emits the required HITL decision request. Before each individual numbered step below, also run the lighter Per-Action Gate from `../../../replit.md` — state `Gate: OK` or `Gate: BLOCKED` before acting on that step, and stop the entire task immediately on `BLOCKED` rather than continuing to the next step.
+Before numbered workflow steps, run the Mandatory HITL Gate from `../../../replit.md`. Do not edit, start a phase, or final-report until the gate passes, returns Gate Blocked (a deterministic gate needs authorization), or emits the required HITL decision request (a Judgment gate found genuine ambiguity). Before each individual numbered step below, also run the lighter Per-Action Gate from `../../../replit.md` — state `Gate: OK` or `Gate: BLOCKED` before acting on that step, and stop the entire task immediately on `BLOCKED` rather than continuing to the next step.
 
 1. Read `../../../replit.md` and `../../../ai/{metco,frontend,ui-ux,testing}.md`.
 2. State behavior, roles, exact paths, expected owner, capability gates, and stop conditions.

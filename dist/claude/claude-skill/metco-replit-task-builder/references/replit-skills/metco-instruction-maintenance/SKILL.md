@@ -7,7 +7,7 @@ description: Audit, simplify, reconcile, or extend METCO replit.md, ai instructi
 
 Automatically select internal mode `INSTRUCTION_SYSTEM_MAINTENANCE`. This selects procedure; only explicitly authorized instruction paths may change.
 
-Before numbered workflow steps, run the Mandatory HITL Gate from `../../../replit.md`. Do not edit, start a phase, or final-report until the gate passes or emits the required HITL decision request. Before each individual numbered step below, also run the lighter Per-Action Gate from `../../../replit.md` — state `Gate: OK` or `Gate: BLOCKED` before acting on that step, and stop the entire task immediately on `BLOCKED` rather than continuing to the next step.
+Before numbered workflow steps, run the Mandatory HITL Gate from `../../../replit.md`. Do not edit, start a phase, or final-report until the gate passes, returns Gate Blocked (a deterministic gate needs authorization), or emits the required HITL decision request (a Judgment gate found genuine ambiguity). Before each individual numbered step below, also run the lighter Per-Action Gate from `../../../replit.md` — state `Gate: OK` or `Gate: BLOCKED` before acting on that step, and stop the entire task immediately on `BLOCKED` rather than continuing to the next step.
 
 1. Read `../../../replit.md` and `../../../ai/{metco,maintenance}.md` plus every instruction being changed.
 2. Require explicit instruction-change authority; capture scoped status/diff and exclude application code.

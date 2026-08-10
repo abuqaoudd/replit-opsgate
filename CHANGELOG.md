@@ -1,5 +1,12 @@
 # Changelog
 
+## 6.0.10 replit.md MCP Awareness and Skill-File Corrections - 2026-08-10
+
+- Added `replit.md` section 10 ("MCP tool availability"), closing a gap left by 6.0.7-6.0.9: the MCP-aware gate only reached Replit's Agent through a compiled `replit_prompt` request with `mcp.enabled: true`. `replit.md` itself - read directly by the agent, not only via compiled prompts - never mentioned the `/mcp` server. It now tells the agent to check for registered `metco_*` tools before running the Mandatory HITL Gate by hand, and states the same Deterministic/Judgment split from 6.0.8 for tool-reported failures.
+- Fixed a real contradiction found during review: `metco-database-schema-migration/SKILL.md` and `metco-data-seeding/SKILL.md` each required the user provide the literal legacy mode label (`DATABASE_SCHEMA_MIGRATION`, `DATA_SEEDING`) as an authorization token - the exact labels `replit.md` and `PROCESS_MODES_SPEC.md` declare obsolete and say to never emit or request. Replaced both with the actual capability name (`schema_migration_backfill`, `data_seeding`) and its real `requires` list from `CAPABILITY_GATES`.
+- Updated the shared HITL-gate pointer sentence in all 14 `canonical/references/replit-skills/*/SKILL.md` files, which previously only described two outcomes ("the gate passes or emits the required HITL decision request") - now names the third outcome the 6.0.8 split introduced (a Deterministic gate returning "Gate Blocked," distinct from a Judgment gate's HITL decision request).
+- Verified against the full fixture suite (`validate-kit.py`: 0 warnings after rebuilding distributions, `test-all.py`: 58/58).
+
 ## 6.0.9 Lexical Analysis Module - 2026-08-10
 
 - Added `tools/metco_lexer.py`: word-aware tokenization plus a small suffix-stripping stemmer, replacing the plain substring matching `score_signals` (routing) and the regex chain in `intake-request.py` (deliverable detection) used before. Fixes two concrete bugs found during review: substring leakage across word boundaries (e.g. "test" matching inside "fastest"/"latest"; intake's `\baudit|review|findings?\b` only applied `\b` to the first/last alternative, so "review" matched inside "preview" with no boundary at all), and rigid exact-form matching (a signal author had to spell out every plural/tense variant by hand or the match silently failed).

@@ -271,3 +271,13 @@ Use:
 - `metco-kit/tools/intake-request.py` only as a cautious first pass for plain-language requests; do not invent high-risk paths or authorizations.
 
 The engine files guide routing and prompt generation. They do not grant write authority, bypass protected paths, or replace explicit user scope.
+
+## 10. MCP tool availability
+
+Before running the Mandatory HITL Gate by hand, check whether this project has registered METCO's own gate tools as MCP tools (names conventionally prefixed `metco_` - `metco_check_capability`, `metco_check_paths`, `metco_preflight`, `metco_record_decision`, plus routing/lint tools). If they are available, call them directly instead of re-deriving the gate table in prose:
+
+- A deterministic gate (`capability_gate`, `protected_path_gate`, `scope_gate`) failing from a tool's response is reported the same way as the prose version - name the gate, state what's missing, stop. It is never a HITL decision.
+- Reserve the HITL decision format for ambiguity none of the tools can see (unknown next step, tied valid choices, a self-made scope-expanding decision) - these only surface during the work itself.
+- If a human answers a HITL question, call `metco_record_decision` with the HITL id and answer before resuming, so the decision is persisted outside the conversation.
+
+Only fall back to the manual reasoning table in section 3 if a tool call errors or the MCP connection is unreachable, and say so explicitly in the Final Report when that happens - it means the gate ran on inference instead of a computed result. MCP tool availability changes how a gate result is obtained, never what the gate requires or what counts as protected, locked, or authorized.

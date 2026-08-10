@@ -7,10 +7,10 @@ description: Implement an explicitly authorized METCO Replit schema migration, E
 
 Automatically select internal mode `DATABASE_SCHEMA_EVOLUTION`. This selects procedure; explicit authority and environment guards remain required.
 
-Before numbered workflow steps, run the Mandatory HITL Gate from `../../../replit.md`. Do not edit, start a phase, or final-report until the gate passes or emits the required HITL decision request. Before each individual numbered step below, also run the lighter Per-Action Gate from `../../../replit.md` — state `Gate: OK` or `Gate: BLOCKED` before acting on that step, and stop the entire task immediately on `BLOCKED` rather than continuing to the next step.
+Before numbered workflow steps, run the Mandatory HITL Gate from `../../../replit.md`. Do not edit, start a phase, or final-report until the gate passes, returns Gate Blocked (a deterministic gate needs authorization), or emits the required HITL decision request (a Judgment gate found genuine ambiguity). Before each individual numbered step below, also run the lighter Per-Action Gate from `../../../replit.md` — state `Gate: OK` or `Gate: BLOCKED` before acting on that step, and stop the entire task immediately on `BLOCKED` rather than continuing to the next step.
 
 1. Read `../../../replit.md` and `../../../ai/{metco,database,backend,security,testing,agents}.md`.
-2. Require `DATABASE_SCHEMA_MIGRATION`, approved ERD/mapping, named paths, `PRODUCTION_ACCESS: NO`, backup/rollback plan, and explicit destructive limits; otherwise stop.
+2. Require explicit authorization for the `schema_migration_backfill` capability - approved target mapping, named established paths, safe non-production environment, and rollback plan - plus approved ERD/mapping, `PRODUCTION_ACCESS: NO`, and explicit destructive limits; otherwise stop.
 3. Capture scoped baseline. Inventory affected schema, constraints, indexes, consumers, data quality, and current contract.
 4. Map each element to create/change/retain/deprecate; invent nothing.
 5. Run one batch: expand → backfill → integrity validation → switch readers/writers → consumer/API verification.
