@@ -159,17 +159,66 @@ def route_request(request):
     }
     if replit:
         capability = replit.get("capability") or next(iter(authorizations.keys()), None) or "ordinary_application_change"
+        full_references = ["replit.md", *(replit.get("references") or [])]
         result.update(
             {
                 "replit_mode": replit.get("mode"),
                 "skill": replit.get("skill"),
-                "required_references": ["replit.md", *(replit.get("references") or [])],
+                "required_references": trim_references(full_references, request, text),
                 "capability": capability,
                 "missing_authority": unique(missing_authority),
                 "blocked": len(missing_authority) > 0,
             }
         )
     return result
+
+
+# Reference file -> keywords that justify keeping it when reference_scope=="minimal".
+# These are intentionally about the *topic* of the reference doc, not the routing signals -
+# a task can be routed to a mode (e.g. by "endpoint") while still not needing every reference
+# that mode's route normally bundles (e.g. ai/security.md if nothing security-shaped is in scope).
+REFERENCE_TOPIC_KEYWORDS = {
+    "ai/backend.md": ["backend", "api", "endpoint", "service", "repository", "server"],
+    "ai/frontend.md": ["frontend", "react", "component", "page", "hook", "client"],
+    "ai/database.md": ["database", "schema", "migration", "backfill", "mapping", "index", "query"],
+    "ai/security.md": ["security", "auth", "permission", "role", "tenant", "sensitive"],
+    "ai/testing.md": ["test", "testing", "coverage", "regression"],
+    "ai/ui-ux.md": ["ui", "ux", "accessibility", "responsive", "visual"],
+    "ai/agents.md": ["agent"],
+    "ai/refactoring.md": ["refactor", "consolidate", "decompose", "duplicate"],
+}
+# Always kept regardless of scope trimming - core routing/gate doc plus the entry point.
+REFERENCE_ALWAYS_KEEP = {"replit.md", "ai/metco.md"}
+
+
+def trim_references(references, request, scored_text):
+    """Return the reference list unchanged unless the request opts into trimming.
+
+    Default behavior (no "reference_scope" field, or reference_scope != "minimal") is
+    unchanged from before this function existed, so existing fixtures/requests keep
+    producing byte-identical prompts. Only requests that explicitly set
+    request["reference_scope"] = "minimal" get a filtered list, based on whether that
+    reference's topic keywords actually appear in the request's own text (module,
+    outcome, acceptance, authorizations) plus its scope paths.
+    """
+    if (request.get("reference_scope") or "full") != "minimal":
+        return unique(references)
+    path_text = " ".join([*(request.get("scope") or {}).get("write_paths", []), *(request.get("scope") or {}).get("read_paths", [])])
+    haystack = f"{scored_text} {path_text}".lower()
+    kept = []
+    for reference in unique(references):
+        if reference in REFERENCE_ALWAYS_KEEP:
+            kept.append(reference)
+            continue
+        keywords = REFERENCE_TOPIC_KEYWORDS.get(reference)
+        if keywords is None or any(keyword in haystack for keyword in keywords):
+            kept.append(reference)
+    # Never trim down to nothing but the always-keep set for a replit_prompt - if trimming
+    # would strip every topic reference, that's a sign the request text is too sparse to
+    # trust, so fall back to the full list rather than under-informing the agent.
+    if len(kept) <= len(REFERENCE_ALWAYS_KEEP) and len(references) > len(REFERENCE_ALWAYS_KEEP):
+        return unique(references)
+    return kept
 
 
 def print_json(value):
@@ -309,8 +358,25 @@ def as_list(items, fallback="None specified"):
     return "\n".join(f"- {item}" for item in items)
 
 
-def mandatory_hitl_gate():
-    return """## Mandatory HITL Gate (per phase and final report)
+HITL_DECISION_BLOCK = """If blocked, return only:
+
+# HITL decision required
+
+ID: HITL-task-Pphase-Qnumber
+Blocked check: name the failed gate row
+Question: ask the smallest required decision
+Evidence checked: list the evidence already inspected
+Options:
+A. option label - exact scope effect
+B. option label - exact scope effect
+Exact resume point: phase/step to resume after a valid DECIDE reply
+Required reply: DECIDE HITL-id: answer and exact scope"""
+
+
+def mandatory_hitl_gate(request=None):
+    mcp = (request or {}).get("mcp") or {}
+    if not mcp.get("enabled"):
+        return f"""## Mandatory HITL Gate (per phase and final report)
 
 Also run the lighter Per-Action Gate from replit.md before every individual step in the Execution section below - it checks the same three cases at finer grain and does not replace this table at the checkpoints where the table is required.
 
@@ -329,19 +395,54 @@ Before editing, before each phase, and before final report, answer this gate exp
 
 Stop immediately if any required answer is NO, any risky answer is YES without explicit authorization, two valid choices remain, or proceeding requires invented business/data/security/API behavior.
 
-If blocked, return only:
+{HITL_DECISION_BLOCK}"""
 
-# HITL decision required
+    prefix = mcp.get("tool_prefix", "metco_")
+    return f"""## Mandatory HITL Gate (per phase and final report) - MCP mode
 
-ID: HITL-task-Pphase-Qnumber
-Blocked check: name the failed gate row
-Question: ask the smallest required decision
-Evidence checked: list the evidence already inspected
-Options:
-A. option label - exact scope effect
-B. option label - exact scope effect
-Exact resume point: phase/step to resume after a valid DECIDE reply
-Required reply: DECIDE HITL-id: answer and exact scope"""
+MCP tools are registered for this project. Before editing, before each phase, and before final report, call these tools directly instead of re-deriving the gate table by hand each time:
+
+1. Call `{prefix}check_capability` with this request's authorizations. If it returns `can_proceed: false`, stop and report the missing capability/evidence as blocked - do not implement.
+2. Call `{prefix}check_paths` with this request's scope. If it reports a protected-path violation, stop immediately and do not touch those paths.
+3. Call `{prefix}preflight` with the full request before the first edit, before each phase, and again immediately before the final report. If `can_proceed` is false or `required_human_decision` is true, stop and return only the HITL decision block below, using the tool's own `evidence` field.
+4. If a human answers a HITL question, call `{prefix}record_decision` with the HITL id and the answer before resuming, so the decision is persisted outside this conversation.
+
+Only fall back to the manual eight-row reasoning table (owner/path known, scope authorized, protected paths excluded, risky change authorized, no two-valid-choices ambiguity, no invented business/data/security/API rule, verification possible) if a tool call errors or the MCP connection is unreachable - state that explicitly in the Final Report if it happens, since it means the gate ran on inference instead of a computed result.
+
+{HITL_DECISION_BLOCK}"""
+
+
+def per_action_gate_line(request=None):
+    mcp = (request or {}).get("mcp") or {}
+    if not mcp.get("enabled"):
+        return "Before each step below, run the Per-Action Gate from replit.md and state its result (`Gate: OK` or `Gate: BLOCKED`) before acting on that step. A `BLOCKED` result stops the entire task immediately; do not continue to the next step or defer it to the final report."
+    prefix = mcp.get("tool_prefix", "metco_")
+    return f"Before each step below, call `{prefix}check_paths` (and `{prefix}preflight` for any step touching a risky/package/config surface) and state its result (`Gate: OK` or `Gate: BLOCKED`) before acting on that step. A `BLOCKED` result stops the entire task immediately; do not continue to the next step or defer it to the final report."
+
+
+def discovery_steps(request=None):
+    known = (request or {}).get("known_context") or {}
+    owners, callers, tests = known.get("owners"), known.get("callers"), known.get("tests")
+    if not (owners or callers or tests):
+        return """1. Capture scoped status and diff for approved paths.
+2. Inspect named owners, direct callers/imports, contracts, and related tests.
+3. Stop discovery once ownership, direct consumers, pre-existing changes, and relevant checks are known.
+4. Complete reuse/creation decisions before adding any new unit.
+5. Implement only within approved scope and preserve protected paths.
+6. Run the smallest risk-based checks available in the project."""
+    known_lines = []
+    if owners:
+        known_lines.append(f"Owner(s): {', '.join(owners)}")
+    if callers:
+        known_lines.append(f"Direct caller(s)/import site(s): {', '.join(callers)}")
+    if tests:
+        known_lines.append(f"Relevant test(s): {', '.join(tests)}")
+    known_block = "; ".join(known_lines)
+    return f"""1. Capture scoped status and diff for approved paths.
+2. Owner, callers, and tests are already known from the request - {known_block}. Do a quick targeted check that this is still current (git status/diff on those exact paths) instead of open-ended discovery; only widen the search if one of these is stale or missing.
+3. Complete reuse/creation decisions before adding any new unit.
+4. Implement only within approved scope and preserve protected paths.
+5. Run the smallest risk-based checks available in the project."""
 
 
 def context_block(request):
@@ -415,20 +516,15 @@ Must remain unchanged:
 {as_list(request.get("must_not_change"))}
 
 {blocked}
-{mandatory_hitl_gate()}
+{mandatory_hitl_gate(request)}
 
 ## Execution
 
 {phase_line}
 
-Before each step below, run the Per-Action Gate from replit.md and state its result (`Gate: OK` or `Gate: BLOCKED`) before acting on that step. A `BLOCKED` result stops the entire task immediately; do not continue to the next step or defer it to the final report.
+{per_action_gate_line(request)}
 
-1. Capture scoped status and diff for approved paths.
-2. Inspect named owners, direct callers/imports, contracts, and related tests.
-3. Stop discovery once ownership, direct consumers, pre-existing changes, and relevant checks are known.
-4. Complete reuse/creation decisions before adding any new unit.
-5. Implement only within approved scope and preserve protected paths.
-6. Run the smallest risk-based checks available in the project.
+{discovery_steps(request)}
 
 ## Acceptance Criteria
 

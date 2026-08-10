@@ -1,8 +1,8 @@
 # Generated METCO Python contracts. Edit this file instead of standalone JSON manifests.
 
 KIT_MANIFEST = {'name': 'metco-kit',
- 'version': '6.0.6-ooi',
- 'release_date': '2026-07-27',
+ 'version': '6.0.7',
+ 'release_date': '2026-08-10',
  'source_version': '6',
  'purpose': 'Canonical METCO prompt, skill, and Replit engine foundation kit with object-oriented instruction '
             'contracts.',
@@ -283,7 +283,21 @@ REQUEST_SCHEMA = {'$schema': 'https://json-schema.org/draft/2020-12/schema',
                                                                            'evidence': {'type': 'array',
                                                                                         'items': {'type': 'string'}}}}},
                 'acceptance': {'type': 'array', 'items': {'type': 'string'}},
-                'must_not_change': {'type': 'array', 'items': {'type': 'string'}}}}
+                'must_not_change': {'type': 'array', 'items': {'type': 'string'}},
+                # Optional speed-oriented fields for replit_prompt requests - all opt-in, and
+                # each is a no-op when absent so existing requests compile byte-identical prompts.
+                'mcp': {'type': 'object',
+                       'description': 'When enabled, compile-prompt.py emits MCP tool-call instructions (metco_preflight/check_paths/check_capability/record_decision) for the HITL gate instead of a manual prose reasoning table, since the target project has those tools registered on /mcp.',
+                       'properties': {'enabled': {'type': 'boolean'},
+                                      'tool_prefix': {'type': 'string', 'description': 'Defaults to "metco_" - override only if the target server registered the kit tools under a different prefix.'}}},
+                'known_context': {'type': 'object',
+                                  'description': 'When any of these are set, compile-prompt.py replaces the open-ended discovery steps with a targeted verification instruction against the named items instead of telling the agent to go find them.',
+                                  'properties': {'owners': {'type': 'array', 'items': {'type': 'string'}},
+                                                 'callers': {'type': 'array', 'items': {'type': 'string'}},
+                                                 'tests': {'type': 'array', 'items': {'type': 'string'}}}},
+                'reference_scope': {'type': 'string',
+                                    'enum': ['full', 'minimal'],
+                                    'description': 'Defaults to "full" (unchanged behavior). "minimal" trims required_references down to only the ones whose topic keywords appear in the request text/scope, always keeping replit.md and ai/metco.md.'}}}
 
 DISTRIBUTIONS = {'claude': {'root': 'dist/claude',
              'copies': [['canonical/CLAUDE_PROJECT_INSTRUCTIONS.md', 'dist/claude/CLAUDE_PROJECT_INSTRUCTIONS.md'],
