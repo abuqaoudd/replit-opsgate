@@ -1,6 +1,6 @@
 # Generated METCO release hashes
 
-RELEASE_HASHES = {'generated_at': '2026-08-10T08:42:25.985007Z',
+RELEASE_HASHES = {'generated_at': '2026-08-10T08:51:22.153665Z',
  'files': [{'path': 'dist/claude/CLAUDE_PROJECT_INSTRUCTIONS.md',
             'sha256': 'da381dc5b5f2021b3f2750344cd9f765da3e5c572e8b67dab36f650389263ebf'},
            {'path': 'dist/claude/claude-skill/metco-project-prompt-router.zip',
@@ -210,7 +210,7 @@ RELEASE_HASHES = {'generated_at': '2026-08-10T08:42:25.985007Z',
            {'path': 'dist/claude/templates/METCO_TASK_BACKLOG_PROMPT_TEMPLATE.md',
             'sha256': 'a4f6e7de6a408cd399b533e8fac0583b5d480cc7fdb0bdab6934e0ef37b85c7a'},
            {'path': 'dist/release_hashes.py',
-            'sha256': '895fef73aad244b7a38a47977106743cfc51de85c2392c8b488b56710042cf7c'},
+            'sha256': '3b306243fa924386ddca8174edb745b26a73605af96c986d947fd4b78ed5dd93'},
            {'path': 'dist/replit-install/.agents/skills/metco-api-server-development/SKILL.md',
             'sha256': '33a2f00fdbd9348b35a6d2cf25a9e63f03fd12b87478ef507a05ffa6f5f91a7d'},
            {'path': 'dist/replit-install/.agents/skills/metco-auth-permission-workflow/SKILL.md',

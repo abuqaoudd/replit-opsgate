@@ -13,6 +13,7 @@ from pathlib import Path
 
 import metco_contracts
 import metco_fixtures
+import metco_lexer
 
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
@@ -76,12 +77,10 @@ def same_bytes(a, b):
 
 
 def score_signals(text, signals):
-    haystack = f" {str(text or '').lower()} "
-    score = 0
-    for signal in signals or []:
-        needle = str(signal).lower()
-        if needle in haystack:
-            score += 3 if " " in needle else 1
+    """Word-aware signal scoring - see metco_lexer.py. Kept as a thin wrapper so every existing
+    call site (and anything importing this function by name) keeps working unchanged; only the
+    matching behavior underneath improved (no more substring leakage across word boundaries)."""
+    score, _matched = metco_lexer.lexical_score(text, signals)
     return score
 
 
@@ -121,22 +120,28 @@ def route_request(request):
     )
     risk_text = " ".join([text, *(request.get("must_not_change") or [])])
 
-    def best_route(routes):
+    def best_route(routes, label_key="mode"):
         best = None
+        scored_by_label = []
         for route in routes:
             scored = dict(route)
             scored["score"] = score_signals(text, route.get("signals"))
+            scored_by_label.append((route.get(label_key) or route.get("deliverable"), scored["score"]))
             if best is None or scored["score"] > best["score"]:
                 best = scored
-        return best
+        _best_score, tied_labels = metco_lexer.top_candidates(scored_by_label)
+        # Only a genuine tie for the top score across two or more routes counts as ambiguous -
+        # one route scoring highest on its own, even by a margin of one, is not ambiguity.
+        best_tied_with = [label for label in tied_labels if label != ((best or {}).get(label_key) or (best or {}).get("deliverable"))]
+        return best, best_tied_with
 
-    artifact = next(
-        (route for route in routing.get("artifact_routes", []) if route.get("deliverable") == request.get("deliverable")),
-        None,
-    ) or best_route(routing.get("artifact_routes", []))
-    replit = best_route(routing.get("replit_routes", [])) if request.get("deliverable") == "replit_prompt" else None
-    lower_risk = risk_text.lower()
-    phased_by_signal = any(signal in lower_risk for signal in routing.get("phased_triggers", []))
+    artifact, artifact_tied_with = (
+        (next((route for route in routing.get("artifact_routes", []) if route.get("deliverable") == request.get("deliverable")), None), [])
+        if any(route.get("deliverable") == request.get("deliverable") for route in routing.get("artifact_routes", []))
+        else best_route(routing.get("artifact_routes", []), label_key="deliverable")
+    )
+    replit, replit_tied_with = best_route(routing.get("replit_routes", [])) if request.get("deliverable") == "replit_prompt" else (None, [])
+    phased_by_signal = any(metco_lexer.lexical_contains(risk_text, signal) for signal in routing.get("phased_triggers", []))
     execution_shape = "phased" if request.get("deliverable") == "replit_prompt" and ((replit or {}).get("force_phased") or phased_by_signal) else "bounded"
 
     missing_authority = []
@@ -156,6 +161,13 @@ def route_request(request):
         "artifact_mode": artifact.get("mode"),
         "template": artifact.get("template"),
         "execution_shape": execution_shape,
+        # Word-aware tie detection (metco_lexer.top_candidates): true only when two or more
+        # artifact-deliverable routes scored exactly equal on their top score - not when one
+        # route simply won by a margin. This is the genuine HITL case-2 shape (two materially
+        # correct answers, no governing signal between them) surfaced automatically instead of
+        # silently taking whichever route happened to be scored first.
+        "artifact_mode_ambiguous": bool(artifact_tied_with),
+        "artifact_mode_ambiguous_with": artifact_tied_with,
     }
     if replit:
         capability = replit.get("capability") or next(iter(authorizations.keys()), None) or "ordinary_application_change"
@@ -168,6 +180,11 @@ def route_request(request):
                 "capability": capability,
                 "missing_authority": unique(missing_authority),
                 "blocked": len(missing_authority) > 0,
+                # Same tie detection, applied to skill/mode selection - the routing decision most
+                # likely to actually change what gets built. A tie here does not block the task;
+                # it is evidence for the Mandatory HITL Gate's "two materially valid choices" row.
+                "routing_ambiguous": bool(replit_tied_with),
+                "routing_ambiguous_with": replit_tied_with,
             }
         )
     return result
@@ -905,23 +922,32 @@ def cmd_lint_prompt(argv):
         raise SystemExit(1)
 
 
+# Deliverable signal lists for intake-request.py, matched word-aware via metco_lexer instead of
+# the regex chain this replaced. The old regex (e.g. r"\baudit|review|findings?\b") only anchored
+# \b to the first and last alternative, so "review" and "seeding" etc. matched as bare substrings
+# - "review" inside "preview" was a real false-positive risk. First-match-wins order is also
+# replaced with scoring plus explicit tie detection, so an outcome that genuinely reads two ways
+# ("review and improve the login form") is reported as ambiguous instead of silently picking
+# whichever deliverable happened to be checked first.
+_INTAKE_DELIVERABLE_SIGNALS = [
+    ("audit", ["audit", "review", "finding", "findings"]),
+    ("specification", ["spec", "specification", "delta spec"]),
+    ("business_file", ["business", "scope", "requirement", "requirements"]),
+    ("task_backlog", ["backlog", "task", "tasks"]),
+    ("change_record", ["change", "improvement", "amendment"]),
+]
+
+
 def cmd_intake_request(argv):
     text = " ".join(argv)
     if not text:
         usage('Usage: python3 tools/intake-request.py "<plain language request>"')
-    lower = text.lower()
-    if re.search(r"\baudit|review|findings?\b", lower):
-        deliverable = "audit"
-    elif re.search(r"\bspec|specification|delta spec\b", lower):
-        deliverable = "specification"
-    elif re.search(r"\bbusiness|scope|requirements?\b", lower):
-        deliverable = "business_file"
-    elif re.search(r"\bbacklog|tasks?\b", lower):
-        deliverable = "task_backlog"
-    elif re.search(r"\bchange|improvement|amendment\b", lower):
-        deliverable = "change_record"
+    scored = [(deliverable, metco_lexer.lexical_score(text, signals)[0]) for deliverable, signals in _INTAKE_DELIVERABLE_SIGNALS]
+    best_score, tied = metco_lexer.top_candidates(scored)
+    if best_score <= 0:
+        deliverable, tied = "replit_prompt", []
     else:
-        deliverable = "replit_prompt"
+        deliverable = tied[0]
     module_match = re.search(r"\b(?:module|for|in)\s+([A-Z][A-Za-z0-9 -]{2,40})", text)
     request = {
         "id": f"REQ-{_dt.datetime.now(_dt.timezone.utc).date().isoformat().replace('-', '')}-INTAKE",
@@ -933,13 +959,18 @@ def cmd_intake_request(argv):
         "acceptance": [],
         "must_not_change": [],
     }
-    if re.search(r"\bschema|migration|backfill\b", lower):
+    if len(tied) > 1:
+        request["intake_notes"] = [
+            f"Deliverable is ambiguous between {' and '.join(tied)} - no signal-based winner. "
+            f"Defaulted to '{deliverable}'; confirm before treating this as authoritative."
+        ]
+    if metco_lexer.lexical_contains(text, "schema") or metco_lexer.lexical_contains(text, "migration") or metco_lexer.lexical_contains(text, "backfill"):
         request["authorizations"]["schema_migration_backfill"] = {"authorized": False, "evidence": []}
-    if re.search(r"\bseed|seeding|demo data|test data\b", lower):
+    if metco_lexer.lexical_contains(text, "seed") or metco_lexer.lexical_contains(text, "demo data") or metco_lexer.lexical_contains(text, "test data"):
         request["authorizations"]["data_seeding"] = {"authorized": False, "evidence": []}
-    if re.search(r"\bpackage|config|environment|deployment\b", lower):
+    if any(metco_lexer.lexical_contains(text, word) for word in ["package", "config", "environment", "deployment"]):
         request["authorizations"]["package_config_environment_deployment"] = {"authorized": False, "evidence": []}
-    if re.search(r"\bdelete|destructive|cleanup|remove\b", lower):
+    if any(metco_lexer.lexical_contains(text, word) for word in ["delete", "destructive", "cleanup", "remove"]):
         request["authorizations"]["contract_change_or_destructive_cleanup"] = {"authorized": False, "evidence": []}
     print_json(request)
 
