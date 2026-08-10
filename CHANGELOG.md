@@ -1,5 +1,12 @@
 # Changelog
 
+## 6.0.11 Two New Claude Skills - 2026-08-10
+
+- Added `canonical/claude-skills/metco-kit-maintainer/SKILL.md`: triggers when a user wants to review, extend, or fix metco-kit's own source (`tools/*.py`, `canonical/**`, manifests, replit-skills, ai references, packaged Claude skills) rather than use the kit to generate an artifact. Encodes the maintenance discipline actually followed throughout this kit's own changelog history - read dependents before changing, prefer additive/opt-in changes, rebuild distributions before validating, require `validate-kit.py` (0 warnings) and `test-all.py` (full pass) before calling a change done, and bump `package.py`/`metco_contracts.py` versions together with a changelog entry.
+- Added `canonical/claude-skills/metco-mcp-integration/SKILL.md`: triggers when a user wants metco-kit's gate tools wired into a target project's own MCP server as real callable tools instead of prose-only gate-following. Encodes the pattern built for `artifacts/api-server` earlier in this kit's use: locate the kit via `METCO_KIT_ROOT` with relative-path fallback, wrap each tool around the kit's own script output rather than reimplementing gate logic, mount on the existing server with stateless transport, degrade gracefully if the kit isn't found, verify with `initialize`/`tools/list`/`tools/call`, and update the target's `replit.md` MCP-tool-availability section so the wired tools actually get used.
+- Registered both in `DISTRIBUTIONS['claude']['skill_packages']`; both are self-contained (no `references/**` mappings needed) and build/zip cleanly alongside the existing two packages.
+- Verified against the full fixture suite (`validate-kit.py`: 0 warnings, `test-all.py`: 58/58) and confirmed both new skills' zips build with the expected `SKILL.md` contents.
+
 ## 6.0.10 replit.md MCP Awareness and Skill-File Corrections - 2026-08-10
 
 - Added `replit.md` section 10 ("MCP tool availability"), closing a gap left by 6.0.7-6.0.9: the MCP-aware gate only reached Replit's Agent through a compiled `replit_prompt` request with `mcp.enabled: true`. `replit.md` itself - read directly by the agent, not only via compiled prompts - never mentioned the `/mcp` server. It now tells the agent to check for registered `metco_*` tools before running the Mandatory HITL Gate by hand, and states the same Deterministic/Judgment split from 6.0.8 for tool-reported failures.

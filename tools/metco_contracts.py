@@ -1,7 +1,7 @@
 # Generated METCO Python contracts. Edit this file instead of standalone JSON manifests.
 
 KIT_MANIFEST = {'name': 'metco-kit',
- 'version': '6.0.10',
+ 'version': '6.0.11',
  'release_date': '2026-08-10',
  'source_version': '6',
  'purpose': 'Canonical METCO prompt, skill, and Replit engine foundation kit with object-oriented instruction '
@@ -305,7 +305,7 @@ DISTRIBUTIONS = {'claude': {'root': 'dist/claude',
                         ['canonical/references', 'dist/claude/references'],
                         ['canonical/specifications', 'dist/claude/specifications'],
                         ['canonical/examples', 'dist/claude/examples']],
-             'skill_packages': ['metco-project-prompt-router', 'metco-replit-task-builder'],
+             'skill_packages': ['metco-project-prompt-router', 'metco-replit-task-builder', 'metco-kit-maintainer', 'metco-mcp-integration'],
              # Sources copied into dist/claude/claude-skill/<target>. Shared by build-distributions.py
              # (which writes these) and validate-kit.py (which checks canonical/dist byte-identity),
              # so this is the single source of truth for the skill-package reference copy map.
