@@ -272,6 +272,8 @@ Use:
 
 The engine files guide routing and prompt generation. They do not grant write authority, bypass protected paths, or replace explicit user scope.
 
+If this `metco-kit` is running against a project other than the one it was originally built for, confirm a `METCO_PROFILE` environment variable is set (`generic-replit` if the project has no profile of its own yet - see `metco-kit/canonical/README-v6.md`) before relying on protected-path or scope results. Without it, the engine defaults to the original project's own paths, which do not apply here and should not be treated as this project's protections.
+
 ## 10. MCP tool availability
 
 Before running the Mandatory HITL Gate by hand, check whether this project has registered METCO's own gate tools as MCP tools (names conventionally prefixed `metco_` - `metco_check_capability`, `metco_check_paths`, `metco_preflight`, `metco_record_decision`, plus routing/lint tools). If they are available, call them directly instead of re-deriving the gate table in prose:

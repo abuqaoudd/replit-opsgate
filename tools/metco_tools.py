@@ -107,7 +107,7 @@ def unique(items):
 def route_request(request):
     routing = read_json("manifests/routing.manifest.json")
     gates = read_json("manifests/capability-gates.json")
-    profile = read_json("manifests/profiles.json")["default_profile"]
+    profile = active_profile(request)
     text = " ".join(
         str(item or "")
         for item in [
@@ -305,6 +305,28 @@ def cmd_check_capabilities(argv):
         raise SystemExit(1)
 
 
+def active_profile(request=None):
+    """Resolve which manifests/profiles.json entry governs this run, so the kit behaves
+    correctly both in the project it was built for and in any new Replit project a submodule
+    of it gets dropped into. Order: METCO_PROFILE env var (set this when running against a
+    different project) > an explicit "profile" field on the request itself > the manifest's
+    own default_profile. Falls back to "generic-replit" - never raises - if none of those
+    resolve to a profile that actually exists, so a new project gets sane generic protections
+    instead of a crash or a silent inheritance of another project's paths."""
+    profiles = read_json("manifests/profiles.json")
+    known = profiles.get("profiles", {})
+    for candidate in [os.environ.get("METCO_PROFILE"), (request or {}).get("profile"), profiles.get("default_profile")]:
+        if candidate and candidate in known:
+            return candidate
+    return "generic-replit" if "generic-replit" in known else profiles.get("default_profile")
+
+
+def protected_paths_for(request=None):
+    profile = active_profile(request)
+    profiles_data = read_json("manifests/protected-paths.json")["profiles"]
+    return profiles_data.get(profile) or profiles_data.get("generic-replit") or next(iter(profiles_data.values()), {})
+
+
 def normalize_pattern(pattern):
     return re.sub(r"\*\*/?", "", str(pattern)).replace("*", "")
 
@@ -318,7 +340,7 @@ def cmd_check_paths(argv):
     if not argv:
         usage("Usage: python3 tools/check-paths.py <request.json>")
     request = load_request(argv[0])
-    protected_paths = read_json("manifests/protected-paths.json")["profiles"]["metco"]
+    protected_paths = protected_paths_for(request)
     scope = request.get("scope") or {}
     all_paths = [*(scope.get("write_paths") or []), *(scope.get("read_paths") or [])]
     violations = []
@@ -349,7 +371,7 @@ def cmd_preflight(argv):
         evidence.append("read_scope_default: direct owners, callers, and tests")
     if route.get("blocked"):
         failed_gates.append("capability_gate: missing_authority")
-    protected_patterns = read_json("manifests/protected-paths.json")["profiles"]["metco"]["never_access"]
+    protected_patterns = protected_paths_for(request).get("never_access", [])
     for candidate in [*write_paths, *read_paths]:
         for pattern in protected_patterns:
             token = normalize_pattern(pattern).rstrip("/")

@@ -1,7 +1,7 @@
 # Generated METCO Python contracts. Edit this file instead of standalone JSON manifests.
 
 KIT_MANIFEST = {'name': 'metco-kit',
- 'version': '6.0.11',
+ 'version': '6.0.12',
  'release_date': '2026-08-10',
  'source_version': '6',
  'purpose': 'Canonical METCO prompt, skill, and Replit engine foundation kit with object-oriented instruction '
@@ -214,30 +214,43 @@ CAPABILITY_GATES = {'ordinary_application_change': {'default': 'allowed_when_sco
                                            'requires': ['exact_explicit_authorization',
                                                         'task_specific_safety_prerequisites']}}
 
+# Protections every profile gets regardless of which specific project the kit is running
+# against - these are universal engineering risks (VCS internals, secrets files, dependency
+# trees, CI, agent memory), not anything specific to the METCO project. A brand-new Replit
+# project that only sets METCO_PROFILE=generic-replit still gets this baseline for free instead
+# of an empty or missing protected-path list.
+_UNIVERSAL_NEVER_ACCESS = ['.git/**', '.env', '.env.*', 'node_modules/**', '.github/workflows/**', '.claude/**', '.agents/memory/**']
+# Locked-by-default categories are already project-agnostic (packages, lockfiles, schema,
+# secrets, etc. are universal engineering categories, not METCO-specific paths), so both
+# profiles below share the exact same list rather than each declaring their own copy.
+_UNIVERSAL_LOCKED_BY_DEFAULT = ['packages',
+                               'lockfiles',
+                               'dependencies',
+                               'workspace_config',
+                               'build_lint_format_config',
+                               '.replit',
+                               'environment',
+                               'secrets',
+                               'deployment',
+                               'infrastructure',
+                               'generated_contracts',
+                               'schema',
+                               'migrations',
+                               'seeds',
+                               '.agents/memory/**',
+                               'instructions',
+                               'unrelated_docs']
+
 PROTECTED_PATHS = {'profiles': {'metco': {'normal_write_paths': ['artifacts/metco/src/**', 'artifacts/api-server/src/**'],
-                        'never_access': ['metco-api/**',
-                                         'pipeline/**',
-                                         '**/metco-api/**',
-                                         '**/pipeline/**',
-                                         '.claude/**',
-                                         '.github/workflows/**'],
-                        'locked_by_default': ['packages',
-                                              'lockfiles',
-                                              'dependencies',
-                                              'workspace_config',
-                                              'build_lint_format_config',
-                                              '.replit',
-                                              'environment',
-                                              'secrets',
-                                              'deployment',
-                                              'infrastructure',
-                                              'generated_contracts',
-                                              'schema',
-                                              'migrations',
-                                              'seeds',
-                                              '.agents/memory/**',
-                                              'instructions',
-                                              'unrelated_docs']}}}
+                        # metco-api/** and pipeline/** are this project's own protected trees -
+                        # kept only on the metco profile, not the universal baseline, since they
+                        # would be meaningless (and misleadingly specific) noise on any other
+                        # project that adopts this kit via the generic-replit profile.
+                        'never_access': [*_UNIVERSAL_NEVER_ACCESS, 'metco-api/**', 'pipeline/**', '**/metco-api/**', '**/pipeline/**'],
+                        'locked_by_default': list(_UNIVERSAL_LOCKED_BY_DEFAULT)},
+                    'generic-replit': {'normal_write_paths': [],
+                        'never_access': list(_UNIVERSAL_NEVER_ACCESS),
+                        'locked_by_default': list(_UNIVERSAL_LOCKED_BY_DEFAULT)}}}
 
 HITL_SCHEMA = {'$schema': 'https://json-schema.org/draft/2020-12/schema',
  'title': 'METCO HITL Decision',
@@ -297,7 +310,9 @@ REQUEST_SCHEMA = {'$schema': 'https://json-schema.org/draft/2020-12/schema',
                                                  'tests': {'type': 'array', 'items': {'type': 'string'}}}},
                 'reference_scope': {'type': 'string',
                                     'enum': ['full', 'minimal'],
-                                    'description': 'Defaults to "full" (unchanged behavior). "minimal" trims required_references down to only the ones whose topic keywords appear in the request text/scope, always keeping replit.md and ai/metco.md.'}}}
+                                    'description': 'Defaults to "full" (unchanged behavior). "minimal" trims required_references down to only the ones whose topic keywords appear in the request text/scope, always keeping replit.md and ai/metco.md.'},
+                'profile': {'type': 'string',
+                           'description': 'Which PROFILES entry (protected paths, write roots) governs this request. Defaults to the METCO_PROFILE environment variable if set, then manifests/profiles.json default_profile ("metco"), then "generic-replit" if neither resolves to a known profile. Set this (or METCO_PROFILE) to "generic-replit" when this kit is dropped into a project other than the one it was built for.'}}}
 
 DISTRIBUTIONS = {'claude': {'root': 'dist/claude',
              'copies': [['canonical/CLAUDE_PROJECT_INSTRUCTIONS.md', 'dist/claude/CLAUDE_PROJECT_INSTRUCTIONS.md'],

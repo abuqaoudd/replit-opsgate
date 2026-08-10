@@ -53,6 +53,18 @@ For an upgrade from version 5.5 to 6, replace `replit.md`, all `ai/**` files, an
 - Detailed specification files define requirement records, interface contracts, traceability, state coverage, verification, and distribution parity.
 - `PASSED`, `FAILED`, and `NOT RUN` keep verification honest.
 
+## Adopting this kit in a different Replit project
+
+This kit was originally built for one project (`manifests/profiles.json`'s `default_profile`, `metco`), whose protected paths (`metco-api/**`, `pipeline/**`) and write roots are specific to that project. Dropping a submodule or vendored copy of this kit into a different Replit project without any change still works, but inherits those project-specific paths, which are meaningless - and can be misleading - anywhere else.
+
+To adopt it elsewhere:
+
+1. Set the `METCO_PROFILE` environment variable (a Repl Secret is the usual place) to `generic-replit`. This switches `route-request.py`, `preflight.py`, and `check-paths.py` to a profile with only universal protections (`.git/**`, `.env`, `node_modules/**`, `.github/workflows/**`, `.claude/**`, `.agents/memory/**`) and none of the original project's specific ones.
+2. If the new project has its own protected trees that deserve the same treatment `metco-api/**`/`pipeline/**` get in the original profile, add a new entry to `PROFILES` and `PROTECTED_PATHS` in `tools/metco_contracts.py` (copy the `generic-replit` entry as a starting point) rather than editing the `metco` entry or hardcoding the new paths into `generic-replit` - a profile should describe one project's own paths, not accumulate every adopting project's paths in one shared bucket.
+3. `METCO_PROFILE` can also be set per-request via an optional `"profile"` field on the request JSON itself, which takes precedence over everything except the environment variable - useful for testing a profile without changing the environment.
+
+Everything else in the kit - routing, capability gates, the HITL protocol, the lexical scoring/tie detection, MCP tool wiring - is already project-agnostic and needs no change to adopt elsewhere.
+
 ## Maintenance
 
 Edit canonical files under `references/`, `templates/`, and `specifications/`, rebuild generated distributions, validate all skill folders, and keep packaged/source copies identical.
