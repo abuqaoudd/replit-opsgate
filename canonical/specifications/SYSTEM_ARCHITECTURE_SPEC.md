@@ -1,4 +1,4 @@
-# METCO System Architecture Specification
+# System Architecture Specification
 
 Specification version: 6
 

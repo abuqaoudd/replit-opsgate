@@ -1,6 +1,6 @@
-# METCO Backend/API Instruction Object
+# Backend/API Instruction Object
 
-Applies to approved `artifacts/api-server/src/**` work.
+Applies to approved work inside this project's backend source root (see `replit.md` §2 - the active profile's `backend_root`, or the task's explicitly authorized backend path when no profile applies).
 
 ## Responsibility
 
@@ -8,7 +8,7 @@ Own backend/API implementation guidance for route contracts, controllers, servic
 
 ## Activation
 
-Use this object only after routing selects an API, backend, full-stack backend phase, permission, or persisted behavior workflow whose approved write scope is inside `artifacts/api-server/src/**`. Selection of this object does not authorize schema, migration, package, config, generated, protected, or destructive changes.
+Use this object only after routing selects an API, backend, full-stack backend phase, permission, or persisted behavior workflow whose approved write scope is inside this project's backend source root. Selection of this object does not authorize schema, migration, package, config, generated, protected, or destructive changes.
 
 ## Inputs
 

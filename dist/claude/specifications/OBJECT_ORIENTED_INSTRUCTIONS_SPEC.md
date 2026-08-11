@@ -1,4 +1,4 @@
-# METCO Object-Oriented Instructions Specification
+# Object-Oriented Instructions Specification
 
 Specification version: 6
 
@@ -25,7 +25,7 @@ An instruction object guides work only inside approved scope. Loading an object 
 
 | Object | Source |
 |---|---|
-| TaskControlInstruction | `ai/metco.md` |
+| TaskControlInstruction | the active profile's business file, e.g. `ai/metco.md` for the `metco` profile |
 | AgentCoordinationInstruction | `ai/agents.md` |
 | FrontendInstruction | `ai/frontend.md` |
 | BackendApiInstruction | `ai/backend.md` |

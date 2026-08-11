@@ -1,4 +1,4 @@
-# METCO Artifact Contracts Specification
+# Artifact Contracts Specification
 
 Specification version: 6
 

@@ -1,7 +1,7 @@
-# METCO package metadata stored as Python.
+# Engine package metadata stored as Python.
 
-PACKAGE = {'name': 'metco-kit-engine-foundation',
- 'version': '6.0.6-ooi',
+PACKAGE = {'name': 'replit-opsgate-engine-foundation',
+ 'version': '6.0.22',
  'private': True,
  'type': 'module',
  'scripts': {'build': 'python3 tools/build-distributions.py',

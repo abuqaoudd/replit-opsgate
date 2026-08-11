@@ -1,6 +1,6 @@
-# METCO Frontend Instruction Object
+# Frontend Instruction Object
 
-Applies to approved `artifacts/metco/src/**` work.
+Applies to approved work inside this project's frontend source root (see `replit.md` §2 - the active profile's `frontend_root`, or the task's explicitly authorized frontend path when no profile applies).
 
 ## Responsibility
 
@@ -8,7 +8,7 @@ Own frontend implementation guidance for routes, pages, feature components, hook
 
 ## Activation
 
-Use this object only after routing selects a frontend-visible workflow or a phase whose immediate outcome changes `artifacts/metco/src/**`. Selection of this object does not authorize backend, schema, package, generated, protected, or cross-contract changes.
+Use this object only after routing selects a frontend-visible workflow or a phase whose immediate outcome changes this project's frontend source root. Selection of this object does not authorize backend, schema, package, generated, protected, or cross-contract changes.
 
 ## Inputs
 

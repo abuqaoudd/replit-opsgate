@@ -1,4 +1,4 @@
-# METCO Replit Install
+# Replit Install
 
 Copy these generated files into the root of the target Replit project:
 

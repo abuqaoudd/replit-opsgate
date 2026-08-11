@@ -1,11 +1,11 @@
-# METCO Vendor approvals
+# Vendor approvals
 
 ## Scope
 
 | Access | Paths |
 |---|---|
-| Write | `artifacts/metco/src/features/vendor-approvals/**` |
-| Never access | `metco-api/**`, `pipeline/**` |
+| Write | `src/features/vendor-approvals/**` |
+| Never access | `internal-api/**`, `build-pipeline/**` |
 
 ## Mandatory HITL Gate
 

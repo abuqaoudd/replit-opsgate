@@ -8,8 +8,8 @@ PASSED: Loading, empty, error, retry, and success states are represented.
 
 # Files Changed
 
-- file: `artifacts/metco/src/features/vendor-approvals/VendorApprovalPage.tsx`
-- file: `artifacts/metco/src/features/vendor-approvals/useVendorApprovals.ts`
+- file: `src/features/vendor-approvals/VendorApprovalPage.tsx`
+- file: `src/features/vendor-approvals/useVendorApprovals.ts`
 
 # Checks
 

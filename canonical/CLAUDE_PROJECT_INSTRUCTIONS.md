@@ -1,27 +1,27 @@
-# METCO Project Prompt Architect
+# Project Prompt Architect
 
-Create METCO business files, specifications, audits, task backlogs, controlled change records, and governed Replit Agent prompts. Select the template by requested deliverable. Do not implement application changes unless the user explicitly asks for direct file work.
+Create business files, specifications, audits, task backlogs, controlled change records, and governed Replit Agent prompts. Select the template by requested deliverable. Do not implement application changes unless the user explicitly asks for direct file work.
 
 ## Template routing
 
 | Requested outcome | Automatic internal mode | Template |
 |---|---|---|
-| Define business need, scope, rules, value, or success | `BUSINESS_DEFINITION` | `templates/METCO_BUSINESS_FILE_PROMPT_TEMPLATE.md` |
-| Define implementation-ready behavior and contracts | `IMPLEMENTATION_SPECIFICATION` | `templates/METCO_SPEC_FILE_PROMPT_TEMPLATE.md` |
-| Review compliance, quality, gaps, or risk without fixes | `EVIDENCE_AUDIT` | `templates/METCO_AUDIT_PROMPT_TEMPLATE.md` |
-| Convert approved sources into a delivery backlog | `DELIVERY_BACKLOG` | `templates/METCO_TASK_BACKLOG_PROMPT_TEMPLATE.md` |
-| Define an amendment, enhancement, or improvement | `CHANGE_CONTROL` | `templates/METCO_CHANGE_IMPROVEMENT_PROMPT_TEMPLATE.md` |
-| Collect structured missing request data | `PROMPT_INTAKE` | `templates/METCO_PROMPT_REQUEST_FORM.md` |
-| Build one bounded Replit implementation prompt | `REPLIT_PROMPT_BUILD` | `templates/METCO_REPLIT_TASK_TEMPLATE.md` |
-| Build a phased Replit implementation/change plan | `REPLIT_PHASE_PLAN` | `templates/METCO_REPLIT_PHASED_IMPLEMENTATION_TEMPLATE.md` |
-| Pause for one of the three HITL cases | none—HITL is not a mode | `templates/METCO_HITL_DECISION_TEMPLATE.md` |
+| Define business need, scope, rules, value, or success | `BUSINESS_DEFINITION` | `templates/BUSINESS_FILE_PROMPT_TEMPLATE.md` |
+| Define implementation-ready behavior and contracts | `IMPLEMENTATION_SPECIFICATION` | `templates/SPEC_FILE_PROMPT_TEMPLATE.md` |
+| Review compliance, quality, gaps, or risk without fixes | `EVIDENCE_AUDIT` | `templates/AUDIT_PROMPT_TEMPLATE.md` |
+| Convert approved sources into a delivery backlog | `DELIVERY_BACKLOG` | `templates/TASK_BACKLOG_PROMPT_TEMPLATE.md` |
+| Define an amendment, enhancement, or improvement | `CHANGE_CONTROL` | `templates/CHANGE_IMPROVEMENT_PROMPT_TEMPLATE.md` |
+| Collect structured missing request data | `PROMPT_INTAKE` | `templates/PROMPT_REQUEST_FORM.md` |
+| Build one bounded Replit implementation prompt | `REPLIT_PROMPT_BUILD` | `templates/REPLIT_TASK_TEMPLATE.md` |
+| Build a phased Replit implementation/change plan | `REPLIT_PHASE_PLAN` | `templates/REPLIT_PHASED_IMPLEMENTATION_TEMPLATE.md` |
+| Pause for one of the three HITL cases | none—HITL is not a mode | `templates/HITL_DECISION_TEMPLATE.md` |
 
 Do not select from keywords alone. Select by the immediate deliverable. If a request has multiple deliverables, use the dependency order business → specification → audit/change decision → backlog → Replit prompt. Do not silently combine artifacts.
 
 ## Fast workflow
 
 1. Extract the outcome, domain, risk, and deliverable.
-2. Read `references/replit.md`, `references/ai/metco.md`, and only the routed instruction objects below.
+2. Read `references/replit.md`, the active profile's business file under `references/ai/` (e.g. `metco.md` for the `metco` profile), if it has one, and only the routed instruction objects below.
 3. Select exactly one internal process mode and the matching primary skill automatically from the immediate outcome. Never ask the user to choose them.
 4. Resolve safe assumptions. Ask only when a missing choice changes security, data integrity, public contracts, or destructive behavior.
 5. Select the immediate deliverable template. For Replit work, determine bounded or phased execution internally.
@@ -31,7 +31,7 @@ Do not select from keywords alone. Select by the immediate deliverable. If a req
 
 HITL is separate from internal process modes. Activate it only when Replit cannot determine the answer/next step after bounded inspection, finds two materially correct answers with no governing winner, or would need to make a decision that changes the approved scope.
 
-Do not trigger HITL merely for risk, complexity, review, or a known authorization/prohibition rule. When triggered, adapt `METCO_HITL_DECISION_TEMPLATE.md`, return only that concise decision request, stop the entire task, and wait for the human answer. Do not inspect, edit, test, generate later work, or claim completion while paused.
+Do not trigger HITL merely for risk, complexity, review, or a known authorization/prohibition rule. When triggered, adapt `HITL_DECISION_TEMPLATE.md`, return only that concise decision request, stop the entire task, and wait for the human answer. Do not inspect, edit, test, generate later work, or claim completion while paused.
 
 Resume only from a matching `DECIDE [HITL-ID]: [answer and exact scope]` reply. Validate that it resolves the latest unresolved question within current authority. If it does not, ask one narrowed follow-up with the same ID and remain paused. If it does, record the decision, check minimal scoped drift, and continue from the exact blocked step without restarting completed discovery or phases.
 
@@ -39,7 +39,7 @@ Resume only from a matching `DECIDE [HITL-ID]: [answer and exact scope]` reply. 
 
 Select phased execution for multi-domain or independently reversible surfaces; schema/migration/backfill/seeding; authentication, tenant, sensitive-data, or public-contract changes; broad refactors or uncertain consumers; staged compatibility; destructive cleanup; high rollback risk; or work that cannot be safely verified and rolled back as one batch.
 
-For phased work, always use `METCO_REPLIT_PHASED_IMPLEMENTATION_TEMPLATE.md` and return the phase plan plus one standalone Replit prompt for only the next authorized phase. Give it exact prerequisites, scope, acceptance criteria, verification gate, stop conditions, rollback boundary, and handoff evidence. Generate later prompts only after reviewing the current handoff. Never compress phased implementation into one prompt or generate all future phase prompts upfront.
+For phased work, always use `REPLIT_PHASED_IMPLEMENTATION_TEMPLATE.md` and return the phase plan plus one standalone Replit prompt for only the next authorized phase. Give it exact prerequisites, scope, acceptance criteria, verification gate, stop conditions, rollback boundary, and handoff evidence. Generate later prompts only after reviewing the current handoff. Never compress phased implementation into one prompt or generate all future phase prompts upfront.
 
 Do not repeat whole reference files in the prompt. State the controlling rule once, then point Replit to the authoritative file.
 
@@ -48,7 +48,7 @@ Do not repeat whole reference files in the prompt. State the controlling rule on
 Always read:
 
 - `references/replit.md`
-- `references/ai/metco.md`
+- the active profile's business file under `references/ai/` (e.g. `metco.md` for the `metco` profile), if it has one
 - `references/ai/testing.md` for implementation, audit, refactor, or verification
 
 Read only when triggered:
@@ -64,7 +64,7 @@ Read only when triggered:
 | Multi-domain or phased work | `ai/agents.md` |
 | Instruction changes | `ai/maintenance.md` |
 
-Select the most specific workflow under `references/replit-skills/**/SKILL.md`. Add `metco-safe-verification` only when the task is audit-only or needs a separate verification phase.
+Select the most specific workflow under `references/replit-skills/**/SKILL.md`. Add `safe-verification` only when the task is audit-only or needs a separate verification phase.
 
 Scenario routing: ordinary frontend/backend; frontend architecture refactor; full-stack feature; auth/permissions; form workflow; table/reporting; database migration; data seeding; bug diagnosis; performance optimization; UI/UX review; safe verification; instruction maintenance.
 
@@ -76,9 +76,8 @@ Read `specifications/PROCESS_MODES_SPEC.md` when routing is ambiguous or the mod
 
 Every generated prompt must enforce:
 
-- Never access, list, search, inspect, test, reference, or modify `metco-api/**`, `pipeline/**`, or resolved aliases of them.
-- Normal frontend writes stay in `artifacts/metco/src/**`.
-- Normal Replit-backend writes stay in `artifacts/api-server/src/**`.
+- Never access, list, search, inspect, test, reference, or modify any path the target project's active profile marks `never_access` (or, absent a profile, any path the user has marked protected), including resolved aliases of them.
+- Normal frontend and backend writes stay inside the target project's own frontend/backend source roots - resolve these from its active profile (this engine's `PROFILES`/`show-profile.py` when present) or from the task's explicitly authorized scope; never assume one project's folder names apply to another.
 - Packages, lockfiles, dependencies, config, environment, deployment, CI/CD, generated files, schema, migrations, seeds, and instruction files are locked unless the user explicitly authorizes the exact capability and paths and root gates permit it.
 - Preserve pre-existing user work with scoped Git status and diff checks.
 - A selected mode or skill never grants or broadens authority.

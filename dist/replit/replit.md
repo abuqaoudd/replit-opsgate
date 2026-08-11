@@ -1,8 +1,27 @@
-# METCO Replit Project Instructions
+# Replit Project Instructions
 
 Instruction version: 6 engine package  
 Content baseline: 6  
-Purpose: Govern Replit Agent work on METCO-owned frontend and backend artifacts.
+Purpose: Govern Replit Agent work on this project's own frontend and backend artifacts, whichever project this file has been installed into - resolved via the active profile (Section 2), never assumed.
+
+## First-run setup check (read before anything else)
+
+If `opsgate.profile.json` does not exist yet in this project's root (the same directory as this file), this project has not been set up for this engine yet. Before doing anything else - including the user's current request:
+
+1. Look for this engine's directory somewhere in this project (see Section 2 for how - identified by the presence of `tools/opsgate_contracts.py`, not by a fixed folder name). **If no such directory exists, this project uses the trimmed copy-only distribution (just this file, `ai/**`, and `.agents/skills/**`, with no vendored tooling) and there is no setup process to run - skip the rest of this section entirely, treat this project as `generic-replit` with no project-specific roots configured yet, and proceed under Section 2's ordinary rule 2 (use only the exact paths the current task explicitly authorizes).** The remaining steps only apply when the engine directory is actually present.
+2. If `PROJECT_SETUP.md` does not already exist in this project's root, copy `<engine-dir>/canonical/templates/PROJECT_SETUP_TEMPLATE.md` there as `PROJECT_SETUP.md`. This file is written for you to fill in, not the user - they are never expected to open or edit it themselves.
+3. This engine exists to help people with no technical background stay safe while using Replit - so the user should do as little of the work as possible. Before asking anything, try to fill in the technical fields yourself: inspect this project's actual folders and files for the likely frontend root (a folder with its own `package.json` and a client-side framework or an `index.html`) and backend root (a folder with route/API handler files, a server entry point), and derive a profile key directly from the project's name (lowercase, spaces and punctuation turned into hyphens) rather than asking the user to invent one. Write whatever you can detect into `PROJECT_SETUP.md` yourself. Only ask the user to confirm what you found, or ask a plain, non-technical question ("does your app have a separate front-end and back-end, or is it all one thing?") if you genuinely cannot tell - never ask using terms like "frontend root," "profile key," or "glob."
+4. Ask the user only for what truly requires their own knowledge: the project's name, and the Business Facts questions (who uses it and what each type of person can do, how work moves through stages, any rules that matter, anything visual worth preserving). Ask these in plain, everyday language, as a normal conversation - not by listing the template's headings or field names at them. Skip the "Extra protected paths" field entirely unless the user brings up something specific on their own (most projects need nothing there); never ask it as a generic technical question. Write each answer into `PROJECT_SETUP.md` yourself, in place of that field's `[FILL IN: ...]` text, keeping its `<!-- key: ... -->` marker exactly as it is. If the user doesn't know an answer yet, leave that field's placeholder in place and move on rather than guessing or pressing them - it can be answered later and setup re-run.
+5. Once every field you could detect or the user could answer is filled in, run `python3 <engine-dir>/tools/apply-setup.py --template PROJECT_SETUP.md --target-root .` from this project's root. This generates this project's real `replit.md` (replacing this file with a copy that has the project's configuration filled in below instead of the placeholder), `ai/**`, and `opsgate.profile.json` - all written to this project's own root, not inside the engine.
+6. Re-read the freshly generated `replit.md` before continuing with anything else - it replaces this file, and the rest of this document may read differently once it does.
+
+This check only ever fires once per project in practice: once `opsgate.profile.json` exists (or step 1 determined no engine directory is present at all), it is satisfied and every later task proceeds normally. To add a second profile to an already-set-up project, or change this project's configuration later, fill in a new or updated `PROJECT_SETUP.md` and re-run the same command - `apply-setup.py` never overwrites an existing profile key without `--force`.
+
+### This project's configuration
+
+<!-- OPSGATE:CONFIG_SUMMARY:START -->
+_Not yet configured - see "First-run setup check" above._
+<!-- OPSGATE:CONFIG_SUMMARY:END -->
 
 ## 1. Authority
 
@@ -10,11 +29,10 @@ Apply: platform/safety → this file → routed `ai/**` → applicable `.agents/
 
 ## 2. Scope
 
-Normal application writes are limited to:
+Normal application writes are limited to this project's own frontend and backend source roots, plus directly related tests inside those trees. Never assume a specific project's folder names - resolve the actual roots in this order:
 
-- Frontend: `artifacts/metco/src/**`
-- Replit backend: `artifacts/api-server/src/**`
-- Directly related tests inside those trees
+1. Look for this engine's `tools/` directory somewhere in this project (it is vendored in, commonly as a git submodule, and may be named `metco-kit`, `replit-opsgate`, or anything else the project chose - identify it by the presence of `tools/opsgate_contracts.py`, not by a fixed folder name). If found, run `python3 <that-directory>/tools/show-profile.py` (or read the active profile from that directory's `tools/opsgate_contracts.py`'s `PROFILES`) to get this project's `frontend_root` and `backend_root`. `OPSGATE_PROFILE` (env var, legacy name `METCO_PROFILE` also honored) or a `"profile"` field on a request selects the profile explicitly; without either, the default is `generic-replit`, whose roots are unset until a project-specific profile is added for this project.
+2. If the resolved roots are unset, or no such engine directory is present at all, use only the exact paths the current task explicitly authorizes as write scope - never guess a folder name from convention or from another project.
 
 Default deny everything else. Read supporting Python contracts or named contracts only when needed and never edit them without explicit authority for the exact target.
 
@@ -22,10 +40,10 @@ Default deny everything else. Read supporting Python contracts or named contract
 
 Never open, list, search, index, inspect, compare, execute, test, reference, copy, or modify:
 
-- `metco-api/**`
-- `pipeline/**` and any case variant
+- Any path the active profile's `never_access` list marks protected (see Section 2 for how to resolve the active profile) - e.g. the `metco` profile adds `metco-api/**` and `pipeline/**` (any case variant) on top of the universal baseline below
+- `.git/**`, `.env`, `.env.*`, `node_modules/**`, `.github/workflows/**`, `.claude/**`, `.agents/memory/**` - universal baseline, protected under every profile
 - aliases, links, mounts, mirrors, caches, or generated copies resolving to protected content
-- `.claude/**`, `.github/workflows/**`, and CI/CD, release, deployment, or production automation
+- CI/CD, release, deployment, or production automation
 
 If a path may resolve to protected content, treat it as protected and report the dependency without inspecting it.
 
@@ -39,7 +57,7 @@ The user provides an outcome, allowed scope, source evidence, and explicit autho
 
 Before inspection:
 
-1. Read this file and `ai/metco.md`.
+1. Read this file and the active profile's business file (e.g. `ai/metco.md` for the `metco` profile), if it has one.
 2. Determine the current observable outcome and affected domain.
 3. Select the most specific installed `.agents/skills/**/SKILL.md` automatically.
 4. Read only the triggered `ai/**` files and the selected skill.
@@ -51,20 +69,20 @@ Select exactly one internal mode automatically and record it in the final report
 
 | Internal mode | Use | Primary skill |
 |---|---|---|
-| `FRONTEND_IMPLEMENTATION` | Ordinary React/client behavior | `metco-frontend-development` |
-| `API_IMPLEMENTATION` | API/service/repository behavior | `metco-api-server-development` |
-| `FULL_STACK_IMPLEMENTATION` | Current phase writes coordinated client and backend behavior | `metco-full-stack-feature` |
-| `AUTH_PERMISSION_IMPLEMENTATION` | Authentication, authorization, tenant, role, or object scope | `metco-auth-permission-workflow` |
-| `FORM_WORKFLOW_IMPLEMENTATION` | Form state, validation, save/cancel, mutations | `metco-form-workflow` |
-| `TABLE_REPORTING_IMPLEMENTATION` | Tables, filters, sorting, pagination, exports, reporting | `metco-table-reporting-workflow` |
-| `FRONTEND_ARCHITECTURE_REFACTOR` | Broad frontend ownership or consolidation | `metco-frontend-architecture-refactor` |
-| `DATABASE_SCHEMA_EVOLUTION` | Schema, mapping, migration, index, backfill, compatibility | `metco-database-schema-migration` |
-| `NONPRODUCTION_DATA_SEEDING` | Deterministic development/test data | `metco-data-seeding` |
-| `BUG_DIAGNOSIS` | Reproduction and root-cause evidence | `metco-bug-diagnosis` |
-| `PERFORMANCE_OPTIMIZATION` | Measured performance bottleneck | `metco-performance-optimization` |
-| `UI_UX_REVIEW` | Visual, responsive, accessibility, or usability review | `metco-ui-ux-review` |
-| `SAFE_VERIFICATION` | Read-only QA, regression, compliance, or release evidence | `metco-safe-verification` |
-| `INSTRUCTION_SYSTEM_MAINTENANCE` | `replit.md`, `ai/**`, or `.agents/skills/**` | `metco-instruction-maintenance` |
+| `FRONTEND_IMPLEMENTATION` | Ordinary React/client behavior | `frontend-development` |
+| `API_IMPLEMENTATION` | API/service/repository behavior | `api-server-development` |
+| `FULL_STACK_IMPLEMENTATION` | Current phase writes coordinated client and backend behavior | `full-stack-feature` |
+| `AUTH_PERMISSION_IMPLEMENTATION` | Authentication, authorization, tenant, role, or object scope | `auth-permission-workflow` |
+| `FORM_WORKFLOW_IMPLEMENTATION` | Form state, validation, save/cancel, mutations | `form-workflow` |
+| `TABLE_REPORTING_IMPLEMENTATION` | Tables, filters, sorting, pagination, exports, reporting | `table-reporting-workflow` |
+| `FRONTEND_ARCHITECTURE_REFACTOR` | Broad frontend ownership or consolidation | `frontend-architecture-refactor` |
+| `DATABASE_SCHEMA_EVOLUTION` | Schema, mapping, migration, index, backfill, compatibility | `database-schema-migration` |
+| `NONPRODUCTION_DATA_SEEDING` | Deterministic development/test data | `data-seeding` |
+| `BUG_DIAGNOSIS` | Reproduction and root-cause evidence | `bug-diagnosis` |
+| `PERFORMANCE_OPTIMIZATION` | Measured performance bottleneck | `performance-optimization` |
+| `UI_UX_REVIEW` | Visual, responsive, accessibility, or usability review | `ui-ux-review` |
+| `SAFE_VERIFICATION` | Read-only QA, regression, compliance, or release evidence | `safe-verification` |
+| `INSTRUCTION_SYSTEM_MAINTENANCE` | `replit.md`, `ai/**`, or `.agents/skills/**` | `instruction-maintenance` |
 
 The selected internal mode is a trace label, not user input or authority. Select it again for each phase from the phase's actual outcome. If a specialized mode applies, prefer it over frontend, API, or full-stack general modes. HITL is never a mode.
 
@@ -138,22 +156,35 @@ The Per-Action Gate checks the same three cases as the Mandatory HITL Gate, at f
 
 ### Mandatory HITL Gate (per phase and final report)
 
+Every row below is checked the same way, but two different kinds of failure resolve differently, and only one of them is actually a HITL case:
+
+- **Deterministic** rows have one correct answer and no judgment involved — a failure means an explicit authorization, evidence, or scope grant is missing. Name the gate, state exactly what is missing, and stop. This is a blocked task, not a decision request — there is nothing to choose between, so never use the `DECIDE` reply format for one of these.
+- **Judgment** rows are the three real HITL cases from the section above (unknown next step, two tied valid options, self-made scope-expanding decision) — only these use the HITL decision-required format.
+
 Before editing, before each phase, and before final report, complete this gate explicitly:
 
-| Check | Answer | Evidence |
-|---|---|---|
-| Is the exact owner/path known? | YES/NO | |
-| Is the write scope explicitly authorized? | YES/NO | |
-| Are protected paths excluded? | YES/NO | |
-| Are package/config/schema/seed/destructive changes needed? | YES/NO | |
-| If risky changes are needed, are they explicitly authorized? | YES/NO/NA | |
-| Are there two materially valid implementation choices? | YES/NO | |
-| Would proceeding require inventing a business rule, permission rule, data rule, or API contract? | YES/NO | |
-| Is verification possible in a safe environment? | YES/NO | |
+| Check | Kind | Answer | Evidence |
+|---|---|---|---|
+| Is the exact owner/path known? | Judgment | YES/NO | |
+| Is the write scope explicitly authorized? | Deterministic | YES/NO | |
+| Are protected paths excluded? | Deterministic | YES/NO | |
+| Are package/config/schema/seed/destructive changes needed? | Deterministic | YES/NO | |
+| If risky changes are needed, are they explicitly authorized? | Deterministic | YES/NO/NA | |
+| Are there two materially valid implementation choices? | Judgment | YES/NO | |
+| Would proceeding require inventing a business rule, permission rule, data rule, or API contract? | Judgment | YES/NO | |
+| Is verification possible in a safe environment? | Deterministic | YES/NO | |
 
-Stop immediately if any required answer is `NO`, any risky answer is `YES` without explicit authorization, two valid choices remain, or proceeding requires invented business/data/security/API behavior.
+Stop immediately on any failing row. If every failing row is Deterministic, name each one and the exact grant it needs, then stop:
 
-If blocked, return only:
+```text
+# Gate blocked
+
+Blocked gate: name the exact failed gate (scope_gate / capability_gate / protected_path_gate / verification_gate)
+Missing: the exact authorization, evidence, or scope change needed to pass
+Effect: task remains paused until that authorization is explicitly granted — this is not a HITL question and does not use the DECIDE reply format
+```
+
+If any failing row is Judgment — it takes priority when both kinds fail together — return only:
 
 ```text
 # HITL decision required
@@ -169,11 +200,11 @@ Exact resume point: phase/step to resume after a valid DECIDE reply
 Required reply: DECIDE HITL-id: answer and exact scope
 ```
 
-Every final report must include `HITL Gate Result`. A report without that section is incomplete. The final report must also confirm the Per-Action Gate ran before every action taken during the task, not only reconstruct its answers afterward — if any per-action check was skipped, say so explicitly rather than omitting it.
+Every final report must include `HITL Gate Result`, stating for each failing row whether it resolved as Gate Blocked (Deterministic) or HITL decision (Judgment). A report without that section is incomplete. The final report must also confirm the Per-Action Gate ran before every action taken during the task, not only reconstruct its answers afterward — if any per-action check was skipped, say so explicitly rather than omitting it.
 
 ## 4. Route instructions
 
-Always read `ai/metco.md`. Read only triggered files:
+Always read the active profile's business file (e.g. `ai/metco.md` for the `metco` profile), if it has one. Read only triggered files:
 
 - React/client: `ai/frontend.md`
 - API/backend: `ai/backend.md`
@@ -245,16 +276,28 @@ Final report: outcome; files changed; ownership/reuse/creation decisions; checks
 
 Stop before accessing or changing protected content, unknown/production services, packages/config, generated contracts, unsupported public contracts, unauthorized schema/migration/seed files, destructive data, weakened security, or code with unresolved overwrite/deletion risk. Request only the smallest missing authorization or decision. When one of the three HITL cases applies, use the full-task pause and resume sequence above.
 
-## 9. METCO engine files
+## 9. Engine files
 
-If `metco-kit/tools/metco_contracts.py` and `metco-kit/tools/**` exist, treat them as the local engine contract for routing, capability gates, protected paths, template metadata, run state, and report parsing.
+If this engine's directory (see Section 2 for how to locate it - it may be named `metco-kit`, `replit-opsgate`, or something else) contains `tools/opsgate_contracts.py` and `tools/**`, treat them as the local engine contract for routing, capability gates, protected paths, template metadata, run state, and report parsing. The rest of this section writes its path as `<engine-dir>/` - substitute the directory you actually found.
 
 Use:
 
-- `metco-kit/tools/metco_contracts.py` to determine deliverable, mode, skill, references, bounded/phased execution, capability gates, protected paths, schemas, and distribution rules.
-- `metco-kit/tools/metco_fixtures.py` for validation fixtures and gold-standard examples.
-- `metco-kit/tools/route-request.py` when a structured request object or compatible request file is available.
-- `metco-kit/tools/compile-prompt.py` when a structured request should be converted into a Replit prompt.
-- `metco-kit/tools/intake-request.py` only as a cautious first pass for plain-language requests; do not invent high-risk paths or authorizations.
+- `<engine-dir>/tools/opsgate_contracts.py` to determine deliverable, mode, skill, references, bounded/phased execution, capability gates, protected paths, schemas, and distribution rules.
+- `<engine-dir>/tools/opsgate_fixtures.py` for validation fixtures and gold-standard examples.
+- `<engine-dir>/tools/route-request.py` when a structured request object or compatible request file is available.
+- `<engine-dir>/tools/compile-prompt.py` when a structured request should be converted into a Replit prompt.
+- `<engine-dir>/tools/intake-request.py` only as a cautious first pass for plain-language requests; do not invent high-risk paths or authorizations.
 
 The engine files guide routing and prompt generation. They do not grant write authority, bypass protected paths, or replace explicit user scope.
+
+If this engine is running against a project other than the one it was originally built for, confirm an `OPSGATE_PROFILE` environment variable is set (`generic-replit` if the project has no profile of its own yet - see `<engine-dir>/canonical/README-v6.md`) before relying on protected-path or scope results. Without it, the engine defaults to the original project's own paths, which do not apply here and should not be treated as this project's protections.
+
+## 10. MCP tool availability
+
+Before running the Mandatory HITL Gate by hand, check whether this project has registered this engine's own gate tools as MCP tools (names conventionally prefixed `opsgate_` by default, configurable via the request's `mcp.tool_prefix` field - e.g. `opsgate_check_capability`, `opsgate_check_paths`, `opsgate_preflight`, `opsgate_record_decision`, plus routing/lint tools; an MCP server wired before the 6.0.13 generalization rename may still use the legacy `metco_` prefix). If they are available, call them directly instead of re-deriving the gate table in prose:
+
+- A deterministic gate (`capability_gate`, `protected_path_gate`, `scope_gate`) failing from a tool's response is reported the same way as the prose version - name the gate, state what's missing, stop. It is never a HITL decision.
+- Reserve the HITL decision format for ambiguity none of the tools can see (unknown next step, tied valid choices, a self-made scope-expanding decision) - these only surface during the work itself.
+- If a human answers a HITL question, call `opsgate_record_decision` (or the legacy `metco_record_decision`, if that is the registered name) with the HITL id and answer before resuming, so the decision is persisted outside the conversation.
+
+Only fall back to the manual reasoning table in section 3 if a tool call errors or the MCP connection is unreachable, and say so explicitly in the Final Report when that happens - it means the gate ran on inference instead of a computed result. MCP tool availability changes how a gate result is obtained, never what the gate requires or what counts as protected, locked, or authorized.

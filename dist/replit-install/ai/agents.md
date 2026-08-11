@@ -1,4 +1,4 @@
-# METCO Agent Coordination Instruction Object
+# Agent Coordination Instruction Object
 
 Use these roles as a lightweight checklist, not separate permission sources. Run only roles relevant to the task.
 
