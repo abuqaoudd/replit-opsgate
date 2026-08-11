@@ -18,8 +18,101 @@ import opsgate_lexer
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
 
+EXTERNAL_PROFILE_CONFIG_FILENAME = "opsgate.profile.json"
+_EXTERNAL_PROFILE_CACHE = None
+
+
+def external_profile_config_path():
+    """Resolve the consuming project's own profile-override file, so a project that drops
+    this kit in as a submodule never has to commit its own profile/business-file data into
+    the engine's shared repo (see canonical/README-v6.md "Adopting this kit" for why this
+    matters - a profile baked into opsgate_contracts.py ships inside this engine's own git
+    history to every project that reuses it, which is fine for nothing project-specific but
+    wrong for one project's actual business facts).
+
+    Resolution order: OPSGATE_PROFILE_CONFIG env var (explicit, works no matter how deeply
+    nested the submodule is) - else walk up from the current working directory looking for a
+    file named exactly "opsgate.profile.json", stopping at the first directory that also
+    contains .git (that is almost always the outer project's real root) or after 12 levels,
+    whichever comes first, so a missing/unusual layout fails to find anything rather than
+    walking to the filesystem root. Returns None if neither resolves - callers treat that as
+    "no external profiles", not an error."""
+    env_path = os.environ.get("OPSGATE_PROFILE_CONFIG")
+    if env_path:
+        return Path(env_path)
+    # The walk starts at this engine's own directory when it is used as a submodule, and
+    # that directory almost always has its own .git (a real submodule gitlink file, or a
+    # vendored nested repo) - so the .git-based stop below is deliberately skipped for the
+    # starting directory itself (`current != start`), otherwise the walk would stop before
+    # ever climbing out of the submodule into the outer project that actually has the file.
+    start = Path.cwd()
+    current = start
+    for _ in range(12):
+        candidate = current / EXTERNAL_PROFILE_CONFIG_FILENAME
+        if candidate.exists():
+            return candidate
+        if current != start and (current / ".git").exists():
+            break
+        if current.parent == current:
+            break
+        current = current.parent
+    return None
+
+
+def load_external_profile_config():
+    """Load the external profile-override file, if one is found, and derive both an
+    (external) manifests/profiles.json-shaped dict and an (external) manifests/protected-
+    paths.json-shaped dict from it in one pass. Cached for the life of the process since
+    every read_json("manifests/profiles.json") / read_json("manifests/protected-paths.json")
+    call goes through this. A missing or malformed file is never fatal - it just means no
+    external profiles are added on top of the built-in ones."""
+    global _EXTERNAL_PROFILE_CACHE
+    if _EXTERNAL_PROFILE_CACHE is not None:
+        return _EXTERNAL_PROFILE_CACHE
+    path = external_profile_config_path()
+    if not path:
+        _EXTERNAL_PROFILE_CACHE = ({}, {})
+        return _EXTERNAL_PROFILE_CACHE
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        print(f"warning: ignoring external profile config at {path} ({exc})", file=sys.stderr)
+        _EXTERNAL_PROFILE_CACHE = ({}, {})
+        return _EXTERNAL_PROFILE_CACHE
+
+    external_profiles = {}
+    external_protected = {}
+    for key, entry in (raw.get("profiles") or {}).items():
+        external_profiles[key] = {
+            "description": entry.get("description", f"{key} profile (defined in {path})."),
+            "business_file": entry.get("business_file", f"ai/{key}.md"),
+            "frontend_root": entry.get("frontend_root"),
+            "backend_root": entry.get("backend_root"),
+            "protected_policy": entry.get("protected_policy", key),
+            "test_policy": entry.get("test_policy", "risk_based_existing_scripts_only"),
+            "distribution": entry.get("distribution", "replit"),
+        }
+        write_paths = [p for p in (entry.get("frontend_root"), entry.get("backend_root")) if p]
+        external_protected[key] = {
+            "normal_write_paths": [f"{p.rstrip('/')}/**" for p in write_paths],
+            "never_access": [*opsgate_contracts._UNIVERSAL_NEVER_ACCESS, *(entry.get("extra_never_access") or [])],
+            "locked_by_default": list(opsgate_contracts._UNIVERSAL_LOCKED_BY_DEFAULT),
+        }
+    _EXTERNAL_PROFILE_CACHE = (external_profiles, external_protected)
+    return _EXTERNAL_PROFILE_CACHE
+
 
 def read_json(relative_path):
+    if relative_path == "manifests/profiles.json":
+        base = copy.deepcopy(opsgate_contracts.CONTRACTS[relative_path])
+        external_profiles, _ = load_external_profile_config()
+        base["profiles"] = {**base.get("profiles", {}), **external_profiles}
+        return base
+    if relative_path == "manifests/protected-paths.json":
+        base = copy.deepcopy(opsgate_contracts.CONTRACTS[relative_path])
+        _, external_protected = load_external_profile_config()
+        base["profiles"] = {**base.get("profiles", {}), **external_protected}
+        return base
     if relative_path in opsgate_contracts.CONTRACTS:
         return copy.deepcopy(opsgate_contracts.CONTRACTS[relative_path])
     with (ROOT_DIR / relative_path).open("r", encoding="utf-8") as handle:
@@ -362,6 +455,7 @@ def cmd_show_profile(argv):
     request = load_request(argv[0]) if argv else {}
     profile = active_profile(request)
     profiles = read_json("manifests/profiles.json").get("profiles", {})
+    external_path = external_profile_config_path()
     print_json(
         {
             "resolved_profile": profile,
@@ -374,6 +468,7 @@ def cmd_show_profile(argv):
                 if request.get("profile") in profiles
                 else "manifests/profiles.json default_profile"
             ),
+            "external_profile_config": str(external_path) if external_path else None,
             "profile_record": profiles.get(profile, {}),
             "protected_paths": protected_paths_for(request),
         }

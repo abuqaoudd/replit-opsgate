@@ -34,7 +34,7 @@ python3 tools/release-notes.py ../audit_unpack/old-kit-root
 python3 tools/preflight.py routing:frontend-task
 python3 tools/check-paths.py routing:frontend-task
 python3 tools/show-profile.py  # resolved active profile, roots, and protected paths - no request file required
-python3 tools/init-profile.py --profile acme --frontend-root client/src --backend-root server/src  # scaffold a new project profile + starter business file
+python3 tools/init-profile.py --profile acme --target-root ../my-project --frontend-root client/src --backend-root server/src  # scaffold a new project profile + starter business file, written OUTSIDE this engine
 python3 tools/check-capabilities.py routing:migration-task-missing-auth
 python3 tools/lint-prompt.py fixtures/prompts/frontend-compiled-with-gate.md
 python3 tools/lint-report.py fixtures/reports/sample-replit-final-report.md

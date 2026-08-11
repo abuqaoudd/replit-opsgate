@@ -1,100 +1,49 @@
 #!/usr/bin/env python3
-"""Scaffold a new profile for adopting this engine on a fresh Replit project.
+"""Scaffold a new profile for adopting this engine on a fresh Replit project - written
+entirely OUTSIDE this engine's own repo, in the consuming project's own root, so a project
+that drops this kit in as a submodule never has to commit its own profile config or business
+facts into the engine's shared git history.
 
-Automates the manual steps described in canonical/README-v6.md "Adopting
-this kit in a different Replit project": it appends one profile entry to
-PROFILES and PROTECTED_PATHS in opsgate_contracts.py, and generates a
-starter business file (default: canonical/references/ai/<profile>.md), so
-onboarding a new project does not require hand-editing Python contracts
-from a blank page.
+Writes two things at --target-root (the outer project's own root, NOT anywhere inside this
+engine):
 
-This is additive only. It refuses to touch a profile key that already
-exists in opsgate_contracts.py - editing an existing profile is a manual
-edit, not something this tool will surgically rewrite. --force only
-controls whether an already-existing business file may be overwritten.
+  <target-root>/opsgate.profile.json   - profile + protected-path config; tools/opsgate_tools.py's
+                                          read_json() merges this on top of the built-in
+                                          metco/generic-replit profiles at runtime.
+  <target-root>/ai/<profile>.md        - starter business file, structured like ai/metco.md,
+                                          with a Business Facts section left as fill-in
+                                          placeholders. This is exactly where the Replit
+                                          installation step (canonical/README-v6.md) already
+                                          expects a project's ai/**  files to live, so no
+                                          copy step is needed for this file specifically.
+
+This is additive only: it refuses to touch a profile key that already exists in
+opsgate.profile.json (edit that file by hand instead), and refuses to overwrite an
+existing business file unless --force.
 
 Usage:
-  python3 tools/init-profile.py --profile acme --frontend-root client/src --backend-root server/src
-  python3 tools/init-profile.py --profile acme --frontend-root client/src \
-      --extra-never-access "legacy-service/**" --extra-never-access "vendor/**"
+  python3 tools/init-profile.py --profile acme --target-root /path/to/outer-project \
+      --frontend-root client/src --backend-root server/src
+  python3 tools/init-profile.py --profile acme --target-root /path/to/outer-project \
+      --frontend-root client/src --extra-never-access "legacy-service/**" --extra-never-access "vendor/**"
 
-After running this, rebuild and validate:
-  python3 tools/build-distributions.py && python3 tools/validate-kit.py
-Then fill in the generated business file's Business Facts section, and set
-OPSGATE_PROFILE=<profile> (or pass "profile" on requests) to select it.
+After running this:
+  1. Fill in the generated business file's Business Facts section.
+  2. Set OPSGATE_PROFILE=<profile> (Repl Secret is the usual place). OPSGATE_PROFILE_CONFIG
+     only needs to be set explicitly if opsgate.profile.json is not discoverable by walking
+     up from the working directory tools are run from (see external_profile_config_path()
+     in tools/opsgate_tools.py for the exact resolution order).
+  3. Nothing in this engine's own repo needs to change or be rebuilt - the profile lives
+     entirely in the outer project.
 """
 import argparse
+import json
 import re
 import sys
-import importlib.util
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
-CONTRACTS_PATH = ROOT / "tools" / "opsgate_contracts.py"
-
 PROFILE_KEY_RE = re.compile(r"^[a-z][a-z0-9]*(-[a-z0-9]+)*$")
-
-import ast
-
-
-def _pos_to_index(source, lineno, col_offset):
-    """Convert a 1-indexed (lineno, col_offset) ast position into a flat
-    string index into `source`."""
-    lines = source.splitlines(keepends=True)
-    return sum(len(l) for l in lines[: lineno - 1]) + col_offset
-
-
-def _find_profiles_dict_end(source, top_level_name):
-    """Return the flat string index right after the last existing entry in
-    <top_level_name>['profiles'], via AST rather than a brittle text anchor -
-    this keeps working no matter how many profiles have already been added
-    by earlier runs of this tool, not just the original two."""
-    tree = ast.parse(source)
-    for node in tree.body:
-        if not (
-            isinstance(node, ast.Assign)
-            and len(node.targets) == 1
-            and isinstance(node.targets[0], ast.Name)
-            and node.targets[0].id == top_level_name
-        ):
-            continue
-        top_dict = node.value
-        if not isinstance(top_dict, ast.Dict):
-            continue
-        for key_node, value_node in zip(top_dict.keys, top_dict.values):
-            if isinstance(key_node, ast.Constant) and key_node.value == "profiles":
-                inner_dict = value_node
-                if not isinstance(inner_dict, ast.Dict) or not inner_dict.values:
-                    fail(f"{top_level_name}['profiles'] is empty or not a dict literal - add the profile by hand instead.")
-                last_value = inner_dict.values[-1]
-                return _pos_to_index(source, last_value.end_lineno, last_value.end_col_offset)
-    fail(
-        f"could not locate {top_level_name}['profiles'] via AST in opsgate_contracts.py - "
-        "has the file structure changed materially? Add the profile by hand instead."
-    )
-
-
-def _profile_already_exists(source, profile):
-    tree = ast.parse(source)
-    for node in tree.body:
-        if not (
-            isinstance(node, ast.Assign)
-            and len(node.targets) == 1
-            and isinstance(node.targets[0], ast.Name)
-            and node.targets[0].id in ("PROFILES", "PROTECTED_PATHS")
-        ):
-            continue
-        top_dict = node.value
-        if not isinstance(top_dict, ast.Dict):
-            continue
-        for key_node, value_node in zip(top_dict.keys, top_dict.values):
-            if isinstance(key_node, ast.Constant) and key_node.value == "profiles":
-                inner_dict = value_node
-                if isinstance(inner_dict, ast.Dict):
-                    for k in inner_dict.keys:
-                        if isinstance(k, ast.Constant) and k.value == profile:
-                            return True
-    return False
+CONFIG_FILENAME = "opsgate.profile.json"
 
 BUSINESS_FILE_TEMPLATE = '''# {title} Task Control Instruction Object
 
@@ -130,8 +79,9 @@ capability gates, protected paths, or explicit user scope.
 <!-- FILL IN: replace this section with the project's real domain facts -
      roles/permissions, lifecycle/state machines, ID formats, key business
      rules, design-system conventions, and any known drift to watch for.
-     See canonical/references/ai/metco.md in this kit for a filled-in
-     example of the level of detail this section is meant to hold. -->
+     ai/metco.md in the replit-opsgate engine repo is a filled-in example
+     of the level of detail this section is meant to hold - it is only an
+     example to look at, not something this project depends on. -->
 
 - Source: [BRD / spec document and date, or "none yet - fill in as decisions are made"].
 - Roles: [list roles and what each owns / cannot do].
@@ -208,6 +158,13 @@ def parse_args(argv):
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
     p.add_argument("--profile", required=True, help="profile key, e.g. acme (lowercase, hyphen-separated)")
+    p.add_argument(
+        "--target-root",
+        default=None,
+        help="the outer/consuming project's own root - NOT this engine's directory. "
+        "If omitted, walks up from the current directory looking for an existing "
+        "opsgate.profile.json, stopping at the first directory containing .git.",
+    )
     p.add_argument("--frontend-root", default=None, help="normal write path for frontend source, e.g. client/src")
     p.add_argument("--backend-root", default=None, help="normal write path for backend source, e.g. server/src")
     p.add_argument("--description", default=None, help="human-readable profile description")
@@ -219,79 +176,66 @@ def parse_args(argv):
     )
     p.add_argument("--test-policy", default="risk_based_existing_scripts_only")
     p.add_argument("--distribution", default="replit")
-    p.add_argument("--business-file", default=None, help="defaults to ai/<profile>.md")
+    p.add_argument("--business-file", default=None, help="defaults to ai/<profile>.md, relative to --target-root")
     p.add_argument("--force", action="store_true", help="overwrite an existing business file at the target path")
     return p.parse_args(argv)
 
 
-def build_profiles_entry(args):
-    desc = args.description or (
-        f"{args.profile} Replit project profile. Select explicitly "
-        f"(OPSGATE_PROFILE={args.profile} or request.profile)."
+def resolve_target_root(args):
+    if args.target_root:
+        root = Path(args.target_root).expanduser().resolve()
+        if not root.is_dir():
+            fail(f"--target-root {args.target_root!r} is not an existing directory.")
+        return root
+    # Skip the .git-based stop for the starting directory itself, same reasoning as
+    # opsgate_tools.external_profile_config_path(): this engine's own directory almost
+    # always has its own .git when used as a submodule, and that must not stop the walk
+    # before it ever climbs into the outer project.
+    start = Path.cwd()
+    current = start
+    for _ in range(12):
+        if (current / CONFIG_FILENAME).exists():
+            return current
+        if current != start and (current / ".git").exists():
+            fail(
+                f"no {CONFIG_FILENAME} found by walking up from {Path.cwd()}, but reached a .git "
+                f"root at {current} with none there either - pass --target-root explicitly "
+                "(the outer project's own root, not this engine's directory)."
+            )
+        if current.parent == current:
+            break
+        current = current.parent
+    fail(
+        f"could not find an existing {CONFIG_FILENAME} by walking up from {Path.cwd()} - "
+        "pass --target-root explicitly for a first-time setup."
     )
-    business_file = args.business_file or f"ai/{args.profile}.md"
-    lines = [
-        f"              {args.profile!r}: {{'description': {desc!r},",
-        f"                                 'business_file': {business_file!r},",
-        f"                                 'frontend_root': {args.frontend_root!r},",
-        f"                                 'backend_root': {args.backend_root!r},",
-        f"                                 'protected_policy': {args.profile!r},",
-        f"                                 'test_policy': {args.test_policy!r},",
-        f"                                 'distribution': {args.distribution!r}}}",
-    ]
-    return "\n".join(lines)
 
 
-def build_protected_paths_entry(args):
-    write_paths = [p for p in (args.frontend_root, args.backend_root) if p]
-    normal_write_paths = [f"{p.rstrip('/')}/**" for p in write_paths]
-    lines = [f"                    {args.profile!r}: {{'normal_write_paths': {normal_write_paths!r},"]
+def load_config(config_path):
+    if not config_path.exists():
+        return {"profiles": {}}
+    try:
+        data = json.loads(config_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        fail(f"{config_path} exists but is not valid JSON ({exc}) - fix it by hand first.")
+    data.setdefault("profiles", {})
+    return data
+
+
+def build_entry(args):
+    entry = {
+        "description": args.description
+        or f"{args.profile} Replit project profile. Select explicitly (OPSGATE_PROFILE={args.profile} or request.profile).",
+        "business_file": args.business_file or f"ai/{args.profile}.md",
+        "frontend_root": args.frontend_root,
+        "backend_root": args.backend_root,
+        "protected_policy": args.profile,
+        "test_policy": args.test_policy,
+        "distribution": args.distribution,
+    }
     if args.extra_never_access:
-        extra = ", ".join(repr(p) for p in args.extra_never_access)
-        lines.append(f"                        'never_access': [*_UNIVERSAL_NEVER_ACCESS, {extra}],")
-    else:
-        lines.append("                        'never_access': list(_UNIVERSAL_NEVER_ACCESS),")
-    lines.append("                        'locked_by_default': list(_UNIVERSAL_LOCKED_BY_DEFAULT)}")
-    return "\n".join(lines)
-
-
-def insert_profile(source, args):
-    profiles_at = _find_profiles_dict_end(source, "PROFILES")
-    source = source[:profiles_at] + ",\n" + build_profiles_entry(args) + source[profiles_at:]
-
-    protected_at = _find_profiles_dict_end(source, "PROTECTED_PATHS")
-    source = source[:protected_at] + ",\n" + build_protected_paths_entry(args) + source[protected_at:]
-    return source
-
-
-def verify_new_source(new_source, profile):
-    """Write the candidate source to a throwaway module and import it, to prove
-    the new profile actually resolves through PROFILES/PROTECTED_PATHS before
-    the real file is touched - textual insertion is only trusted once it is
-    also proven to import and behave correctly."""
-    import ast
-
-    try:
-        ast.parse(new_source)
-    except SyntaxError as exc:
-        fail(f"generated opsgate_contracts.py would not parse ({exc}) - no files were changed.")
-
-    tmp_path = ROOT / "tools" / "_init_profile_verify_tmp.py"
-    tmp_path.write_text(new_source)
-    try:
-        spec = importlib.util.spec_from_file_location("_init_profile_verify_tmp", tmp_path)
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-        if profile not in module.PROFILES["profiles"]:
-            fail("new profile did not appear in PROFILES after insertion - aborting, no files changed.")
-        if profile not in module.PROTECTED_PATHS["profiles"]:
-            fail("new profile did not appear in PROTECTED_PATHS after insertion - aborting, no files changed.")
-        return module.PROFILES["profiles"][profile], module.PROTECTED_PATHS["profiles"][profile]
-    finally:
-        try:
-            tmp_path.write_text("# verification scratch file, safe to ignore\n")
-        except OSError:
-            pass
+        entry["extra_never_access"] = list(args.extra_never_access)
+    return entry
 
 
 def main(argv):
@@ -310,52 +254,46 @@ def main(argv):
             file=sys.stderr,
         )
 
-    source = CONTRACTS_PATH.read_text()
-    if _profile_already_exists(source, args.profile):
+    target_root = resolve_target_root(args)
+    config_path = target_root / CONFIG_FILENAME
+    config = load_config(config_path)
+
+    if args.profile in config["profiles"]:
         fail(
-            f"profile {args.profile!r} already exists in {CONTRACTS_PATH.relative_to(ROOT)} - "
+            f"profile {args.profile!r} already exists in {config_path} - "
             "edit it by hand if you need to change it; this tool only adds new profiles."
         )
 
-    new_source = insert_profile(source, args)
-    resolved_profile, resolved_protected = verify_new_source(new_source, args.profile)
-
-    business_file_rel = resolved_profile["business_file"]
-    business_file_path = ROOT / "canonical" / "references" / business_file_rel
+    entry = build_entry(args)
+    business_file_path = target_root / entry["business_file"]
     if business_file_path.exists() and not args.force:
         fail(
-            f"{business_file_path.relative_to(ROOT)} already exists - pass --force to overwrite, "
+            f"{business_file_path} already exists - pass --force to overwrite, "
             "or choose a different --business-file."
         )
 
-    CONTRACTS_PATH.write_text(new_source)
+    config["profiles"][args.profile] = entry
+    config_path.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
 
     title = args.profile.replace("-", " ").replace("_", " ").title()
     business_file_path.parent.mkdir(parents=True, exist_ok=True)
-    business_file_path.write_text(BUSINESS_FILE_TEMPLATE.format(title=title))
+    business_file_path.write_text(BUSINESS_FILE_TEMPLATE.format(title=title), encoding="utf-8")
 
-    verify_tmp = ROOT / "tools" / "_init_profile_verify_tmp.py"
-    if verify_tmp.exists():
-        try:
-            verify_tmp.write_text("# verification scratch file, safe to ignore\n")
-        except OSError:
-            pass
-
-    print(f"Added profile {args.profile!r} to {CONTRACTS_PATH.relative_to(ROOT)}:")
-    print(f"  frontend_root: {resolved_profile['frontend_root']!r}")
-    print(f"  backend_root: {resolved_profile['backend_root']!r}")
-    print(f"  business_file: {resolved_profile['business_file']!r}")
-    print(f"  normal_write_paths: {resolved_protected['normal_write_paths']!r}")
-    if args.extra_never_access:
-        print(f"  never_access: universal baseline + {args.extra_never_access!r}")
-    else:
-        print("  never_access: universal baseline only")
-    print(f"Generated starter business file: {business_file_path.relative_to(ROOT)}")
+    print(f"Added profile {args.profile!r} to {config_path}:")
+    print(f"  frontend_root: {entry['frontend_root']!r}")
+    print(f"  backend_root: {entry['backend_root']!r}")
+    print(f"  business_file: {entry['business_file']!r}")
+    print(f"  extra_never_access: {entry.get('extra_never_access', [])!r}")
+    print(f"Generated starter business file: {business_file_path}")
     print()
     print("Next steps:")
     print("  1. Fill in the Business Facts section of the generated business file.")
-    print("  2. python3 tools/build-distributions.py && python3 tools/validate-kit.py")
-    print(f"  3. Set OPSGATE_PROFILE={args.profile} (or pass \"profile\": \"{args.profile}\" on requests) to select it.")
+    print(f"  2. Set OPSGATE_PROFILE={args.profile} (or pass \"profile\": \"{args.profile}\" on requests).")
+    print(
+        "  3. Nothing in this engine's own repo needs to change - tools/opsgate_tools.py's "
+        f"read_json() picks up {config_path.name} automatically by walking up from wherever "
+        "the tools are run, or via OPSGATE_PROFILE_CONFIG if that walk won't reach it."
+    )
     return 0
 
 

@@ -55,35 +55,42 @@ For an upgrade from version 5.5 to 6, replace `replit.md`, all `ai/**` files, an
 
 ## Adopting this kit in a different Replit project
 
-This kit ships with two profiles out of the box: `generic-replit` (the default - universal protections only, no project-specific paths) and `metco` (the first adopting project's own profile, with its own protected trees and business file). Dropping a submodule or vendored copy of this kit into a different Replit project without any change already works under `generic-replit`, but a project that wants its own write roots, its own extra protected paths, or its own business-file ground truth needs its own profile.
+This kit is meant to be dropped into other projects as a submodule (or a vendored copy) - which means its own git history ships to every project that reuses it. A profile that describes one specific project's own write roots and protected paths is fine as generic infrastructure, but that project's actual business facts (roles, permissions, ID formats, billing rules - whatever `ai/metco.md` holds for METCO) are that project's own data, not this engine's. Baking a project's profile and business file into `opsgate_contracts.py`/`canonical/references/ai/` the way the original `metco` profile still does means every other adopting project's submodule checkout carries METCO's business facts around for no reason.
+
+So a new profile's config and business file are written entirely **outside this engine's own repo**, in the consuming project's own root - the same place `replit.md` and `ai/**` already end up after the "Replit installation" copy step above. Nothing about adopting a new project ever needs to touch a file inside this engine.
 
 ### Setup process: `tools/init-profile.py`
 
-Running the kit against a new project is not a one-line env var and a hand-edit - it is a real setup step with two outputs (a profile entry and a business file), so it is automated as one command instead of a checklist to follow by hand:
-
 ```
-python3 tools/init-profile.py --profile acme --frontend-root client/src --backend-root server/src
+python3 tools/init-profile.py --profile acme --target-root /path/to/outer-project --frontend-root client/src --backend-root server/src
 ```
 
-This does two things in one pass, then verifies the result actually imports and resolves correctly before writing anything to disk:
+`--target-root` is the *outer* project's own root - not this engine's directory. Run from inside the engine (as it would be when embedded as a submodule), this writes two files at the outer project's root and touches nothing inside the engine:
 
-1. Appends a new entry to both `PROFILES` and `PROTECTED_PATHS` in `tools/opsgate_contracts.py` - the new profile's own `frontend_root`/`backend_root` become its `normal_write_paths`, and any `--extra-never-access <glob>` (repeatable) is added on top of the same universal baseline every profile gets (`.git/**`, `.env`, `node_modules/**`, `.github/workflows/**`, `.claude/**`, `.agents/memory/**`). It never edits an existing profile - re-running with a profile key that already exists refuses and tells you to edit it by hand.
-2. Generates a starter business file (default `canonical/references/ai/<profile>.md`, matching the new `business_file` field) from the same template structure `ai/metco.md` follows - Responsibility, Activation, Inputs, a `## Business Facts` section left as fill-in placeholders, `Must Not`, `Start record`, `Workflow`, `Output Evidence` - so the new project's business ground truth has one obvious place to live instead of needing to be reverse-engineered from `ai/metco.md`'s example.
+1. `<target-root>/opsgate.profile.json` - a small JSON file holding the new profile's `frontend_root`/`backend_root`, `description`, `business_file` name, and any `--extra-never-access <glob>` (repeatable) on top of the universal baseline (`.git/**`, `.env`, `node_modules/**`, `.github/workflows/**`, `.claude/**`, `.agents/memory/**`). `tools/opsgate_tools.py`'s `read_json()` merges this on top of the built-in `metco`/`generic-replit` profiles at runtime, for every tool, automatically - `active_profile()`, `protected_paths_for()`, `show-profile.py`, `compile-prompt.py` all see it with no other change needed.
+2. `<target-root>/ai/<profile>.md` - a starter business file structured like `ai/metco.md` (Responsibility, Activation, Inputs, a `## Business Facts` section left as fill-in placeholders, `Must Not`, `Start record`, `Workflow`, `Output Evidence`), written directly to where the Replit installation step already expects a project's `ai/**` files to live - no copy step needed for this file specifically.
 
-After running it: fill in the generated business file's `## Business Facts` section with the new project's real domain facts, then `python3 tools/build-distributions.py && python3 tools/validate-kit.py`, then set `OPSGATE_PROFILE=acme` (a Repl Secret is the usual place) or pass `"profile": "acme"` on individual requests - the request field takes precedence over the environment variable, which is useful for testing a profile without changing the environment.
+It never edits an existing profile (re-running with a profile key already in `opsgate.profile.json` refuses and tells you to edit that file by hand) and never overwrites an existing business file without `--force`.
+
+After the first run for a given outer project, `--target-root` can be omitted on later calls (adding a second, third, etc. profile to the same project) - the tool walks up from the current directory looking for an existing `opsgate.profile.json`, the same way the runtime resolver does.
+
+**How the engine finds that file at runtime**, since it has no inherent idea where the outer project's root is when running from inside a submodule: the `OPSGATE_PROFILE_CONFIG` environment variable, if set, points at it explicitly. Otherwise every tool walks up from the current working directory looking for a file named exactly `opsgate.profile.json`, skipping the .git-based stop at the *starting* directory specifically (the engine's own submodule root almost always has its own `.git`, and that must not stop the walk before it ever climbs out into the outer project), stopping once it reaches a directory with its own `.git` and no config file there, or after 12 levels. Once found, `OPSGATE_PROFILE=<profile>` (or `"profile": "<profile>"` on a request) selects it exactly like a built-in profile.
+
+After running it: fill in the generated business file's `## Business Facts` section, set `OPSGATE_PROFILE=acme` (a Repl Secret is the usual place), and that's the whole setup - nothing in this engine's own repo changes or needs rebuilding.
 
 ### Doing it by hand instead
 
-If you'd rather not run the script - or need something the flags don't cover - the two things it automates can be done directly:
-
-1. Add a new entry to `PROFILES` and `PROTECTED_PATHS` in `tools/opsgate_contracts.py` (copy the `generic-replit` entry as a starting point) rather than editing the `metco` entry or hardcoding the new paths into `generic-replit` - a profile should describe one project's own paths, not accumulate every adopting project's paths in one shared bucket.
-2. Write `canonical/references/ai/<profile>.md` following the same structure as `ai/metco.md`, and point the new profile's `business_file` field at it.
+If you'd rather not run the script: write `<target-root>/opsgate.profile.json` yourself (see `tools/opsgate_tools.py`'s `load_external_profile_config()` for the exact shape expected under its `"profiles"` key) and `<target-root>/ai/<profile>.md` following `ai/metco.md`'s structure.
 
 Everything else in the kit - routing, capability gates, the HITL protocol, the lexical scoring/tie detection, MCP tool wiring - is already project-agnostic and needs no change to adopt elsewhere.
 
+### Known migration debt: `metco` itself is still a built-in, not an external profile
+
+The `metco` profile and `ai/metco.md` still live inside this engine's own `PROFILES`/`PROTECTED_PATHS` and `canonical/references/ai/`, for backward compatibility with the live deployment that depends on them resolving without any external file present. That is exactly the coupling this section exists to avoid for every *other* project - `metco` just hasn't been migrated to its own `opsgate.profile.json` in METCO's own project root yet. Once that migration happens (write METCO's real profile + business file into METCO's own repo as an external profile, confirm it resolves identically, then delete the built-in `metco` entries and `ai/metco.md` from this engine), the engine carries no project-specific data of its own at all. Until then, treat the built-in `metco` profile as legacy, not as the pattern to copy for a new project.
+
 ### Why `ai/*.md` files mention "protected paths" without listing any
 
-Files under `ai/` (`backend.md`, `database.md`, `maintenance.md`, and the rest, including each project's own business file like `ai/metco.md`) use "protected", "locked", and "restricted" only as behavioral vocabulary - instructions like "do not touch protected paths without authorization." None of them declare or duplicate an actual glob list. The one and only source of truth for what counts as protected on a given profile is `PROTECTED_PATHS`/`protected_paths_for(request)` in `tools/opsgate_contracts.py`; every `ai/*.md` reference to "protected" defers to whatever that function resolves for the active profile, so there is nothing to keep in sync by hand when a profile's protected paths change.
+Files under `ai/` (`backend.md`, `database.md`, `maintenance.md`, and the rest, including a project's own business file whether built-in like `ai/metco.md` or external like a generated `ai/acme.md`) use "protected", "locked", and "restricted" only as behavioral vocabulary - instructions like "do not touch protected paths without authorization." None of them declare or duplicate an actual glob list. The one and only source of truth for what counts as protected on a given profile is `PROTECTED_PATHS`/`protected_paths_for(request)` in `tools/opsgate_contracts.py` (merged with any external `opsgate.profile.json` at runtime); every `ai/*.md` reference to "protected" defers to whatever that resolves for the active profile, so there is nothing to keep in sync by hand when a profile's protected paths change.
 
 ## Maintenance
 
