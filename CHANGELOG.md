@@ -1,5 +1,13 @@
 # Changelog
 
+## 6.0.20 The User Should Do the Least Amount of Work - 2026-08-11
+
+- User feedback on 6.0.19: this engine exists to help people with no technical background use Replit safely - so even having the Agent ask every field's question one by one (including technical ones like "what's your frontend root" or "what should the profile key be") puts too much burden on someone who doesn't know what those terms mean or care. The Agent should detect as much as it can from the project's own files and only ask the user for what genuinely requires their own knowledge.
+- Rewrote `canonical/templates/PROJECT_SETUP_TEMPLATE.md` to split fields into two groups: **Agent: detect/derive yourself** (profile key - derived from the project name rather than invented; frontend/backend roots - detected from the actual folder structure, e.g. a folder with its own `package.json` and a client framework for frontend, route/API handler files for backend) and **ask the user** (project name, and the Business Facts questions - the only things that genuinely need the user's own knowledge). The "Extra protected paths" field is now explicitly skip-by-default - never asked as a standalone technical question, only filled in if the user brings up something specific unprompted. Reworded every Business Facts field's guidance into a plain-language question a non-technical person would understand ("does anything move through stages, like a job going from scheduled to done?" instead of "entity state machines"), dropping jargon while keeping the same underlying `<!-- key: ... -->` field names for `apply-setup.py`'s parser.
+- Updated `replit.md`'s "First-run setup check" (steps 3-4, now split from the old single step 3) and `canonical/README-v6.md`'s walkthrough to match: detect first, ask only what's left, never use technical field names in conversation with the user.
+- No change to the parsing mechanism - confirmed all 12 fields still parse correctly from the reworded template. This is a wording/instruction change, not a functional one; re-ran the full `build-distributions.py` + `build-replit-install.py` + `test-all.py` (62/62) + `validate-kit.py` (0 warnings) cycle in an isolated `/tmp` copy anyway.
+- `METCO-test-local` was not touched.
+
 ## 6.0.19 The Agent Fills In the Template, the User Never Touches It - 2026-08-11
 
 - User feedback on 6.0.18: `PROJECT_SETUP_TEMPLATE.md` and `replit.md`'s "First-run setup check" still framed filling in the template as something the user could do themselves ("ask conversationally... or let the user edit the file directly"). The ask: the user should never open or edit `PROJECT_SETUP.md` at all - the Agent asks the questions and writes every answer into the file itself.
