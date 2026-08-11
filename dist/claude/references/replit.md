@@ -4,6 +4,24 @@ Instruction version: 6 engine package
 Content baseline: 6  
 Purpose: Govern Replit Agent work on this project's own frontend and backend artifacts, whichever project this file has been installed into - resolved via the active profile (Section 2), never assumed.
 
+## First-run setup check (read before anything else)
+
+If `opsgate.profile.json` does not exist yet in this project's root (the same directory as this file), this project has not been set up for this engine yet. Before doing anything else - including the user's current request:
+
+1. Look for this engine's directory somewhere in this project (see Section 2 for how - identified by the presence of `tools/opsgate_contracts.py`, not by a fixed folder name). **If no such directory exists, this project uses the trimmed copy-only distribution (just this file, `ai/**`, and `.agents/skills/**`, with no vendored tooling) and there is no setup process to run - skip the rest of this section entirely, treat this project as `generic-replit` with no project-specific roots configured yet, and proceed under Section 2's ordinary rule 2 (use only the exact paths the current task explicitly authorizes).** The remaining steps only apply when the engine directory is actually present.
+2. If `PROJECT_SETUP.md` does not already exist in this project's root, copy `<engine-dir>/canonical/templates/PROJECT_SETUP_TEMPLATE.md` there as `PROJECT_SETUP.md`.
+3. Fill in every `[FILL IN: ...]` field in `PROJECT_SETUP.md` together with the user - ask conversationally for anything still unfilled, or let the user edit the file directly and confirm when ready. Do not invent business facts, roles, or rules on the user's behalf; ask rather than guess, the same as any other instruction in this file.
+4. Once every field is filled in, run `python3 <engine-dir>/tools/apply-setup.py --template PROJECT_SETUP.md --target-root .` from this project's root. This generates this project's real `replit.md` (replacing this file with a copy that has the project's configuration filled in below instead of the placeholder), `ai/**`, and `opsgate.profile.json` - all written to this project's own root, not inside the engine.
+5. Re-read the freshly generated `replit.md` before continuing with anything else - it replaces this file, and the rest of this document may read differently once it does.
+
+This check only ever fires once per project in practice: once `opsgate.profile.json` exists (or step 1 determined no engine directory is present at all), it is satisfied and every later task proceeds normally. To add a second profile to an already-set-up project, or change this project's configuration later, fill in a new or updated `PROJECT_SETUP.md` and re-run the same command - `apply-setup.py` never overwrites an existing profile key without `--force`.
+
+### This project's configuration
+
+<!-- OPSGATE:CONFIG_SUMMARY:START -->
+_Not yet configured - see "First-run setup check" above._
+<!-- OPSGATE:CONFIG_SUMMARY:END -->
+
 ## 1. Authority
 
 Apply: platform/safety → this file → routed `ai/**` → applicable `.agents/skills/**` → user task → discovered notes. A task may narrow scope, never broaden it. Skills provide workflow, not permission.

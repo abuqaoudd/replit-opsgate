@@ -59,13 +59,33 @@ This kit is meant to be dropped into other projects as a submodule (or a vendore
 
 So a new profile's config and business file are written entirely **outside this engine's own repo**, in the consuming project's own root - the same place `replit.md` and `ai/**` already end up after the "Replit installation" copy step above. Nothing about adopting a new project ever needs to touch a file inside this engine.
 
-### Setup process: `tools/init-profile.py`
+### Setup process: `tools/apply-setup.py` (the primary path)
+
+This only applies when the engine itself is vendored into the project (as a submodule or a full copy) - the trimmed copy-only install described above (just `replit.md`, `ai/**`, `.agents/skills/**`, no `tools/`, no `canonical/`) has nothing to run it with, and `replit.md`'s own first-run check knows to skip straight past setup and fall back to `generic-replit` in that case rather than getting stuck looking for tooling that was never copied in.
+
+When the engine is vendored, this is meant to be run by the Replit Agent itself, not typed by hand - `replit.md`'s own "First-run setup check" (its very first section) tells the Agent exactly this, automatically, the first time it works on a project that hasn't been set up yet:
+
+1. Copy `canonical/templates/PROJECT_SETUP_TEMPLATE.md` to the project root as `PROJECT_SETUP.md` - one plain-language fill-in form covering the profile key, project name, frontend/backend roots, extra protected paths, and the same Business Facts questions `ai/metco.md` answers (roles, lifecycle, ID formats, key business rules, design system, known drift).
+2. Fill it in conversationally with the user (or let them edit the file directly).
+3. Run `python3 <engine-dir>/tools/apply-setup.py --template PROJECT_SETUP.md --target-root .`
+
+That one command writes, all at the project's own root:
+
+- `opsgate.profile.json` and `ai/<profile>.md` - same shape and same shared logic (`tools/opsgate_setup_lib.py`) as `tools/init-profile.py` below, except the Business Facts section is filled in directly from the template's answers instead of left as placeholders, since a human already answered them.
+- `ai/*.md` - the engine's generic domain files (`backend.md`, `frontend.md`, `database.md`, and the rest), copied over if not already present. These apply to any project unchanged and need no project-specific filling in.
+- `replit.md` - a copy of the engine's canonical `replit.md` with the "This project's configuration" section filled in with a literal, human-readable summary of every profile currently configured (roots, protected paths, business file) - not just a note to go look it up dynamically. Re-running setup for a second profile updates this summary to list all configured profiles, not just the newest one.
+
+`apply-setup.py` never overwrites an existing profile key (edit `opsgate.profile.json` by hand instead) and never overwrites an existing `ai/*.md` file without `--force`, so running it again to add a second profile is safe and additive.
+
+### `tools/init-profile.py` (flags-only, for scripted/CI use)
+
+The lower-level primitive `apply-setup.py` itself calls into (see `tools/opsgate_setup_lib.py`) - useful directly when scripting setup without a human filling in a template, e.g. from CI:
 
 ```
 python3 tools/init-profile.py --profile acme --target-root /path/to/outer-project --frontend-root client/src --backend-root server/src
 ```
 
-`--target-root` is the *outer* project's own root - not this engine's directory. Run from inside the engine (as it would be when embedded as a submodule), this writes two files at the outer project's root and touches nothing inside the engine:
+`--target-root` is the *outer* project's own root - not this engine's directory. Run from inside the engine (as it would be when embedded as a submodule), this writes two files at the outer project's root and touches nothing inside the engine (it does not materialize `replit.md`/`ai/*.md` the way `apply-setup.py` does - only the profile config and a placeholder business file):
 
 1. `<target-root>/opsgate.profile.json` - a small JSON file holding the new profile's `frontend_root`/`backend_root`, `description`, `business_file` name, and any `--extra-never-access <glob>` (repeatable) on top of the universal baseline (`.git/**`, `.env`, `node_modules/**`, `.github/workflows/**`, `.claude/**`, `.agents/memory/**`). `tools/opsgate_tools.py`'s `read_json()` merges this on top of the built-in `metco`/`generic-replit` profiles at runtime, for every tool, automatically - `active_profile()`, `protected_paths_for()`, `show-profile.py`, `compile-prompt.py` all see it with no other change needed.
 2. `<target-root>/ai/<profile>.md` - a starter business file structured like `ai/metco.md` (Responsibility, Activation, Inputs, a `## Business Facts` section left as fill-in placeholders, `Must Not`, `Start record`, `Workflow`, `Output Evidence`), written directly to where the Replit installation step already expects a project's `ai/**` files to live - no copy step needed for this file specifically.
