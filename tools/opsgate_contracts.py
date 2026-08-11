@@ -1,8 +1,8 @@
 # Generated engine contracts (Replit OpsGate). Edit this file instead of standalone JSON manifests.
 
 KIT_MANIFEST = {'name': 'replit-opsgate',
- 'version': '6.0.20',
- 'release_date': '2026-08-10',
+ 'version': '6.0.22',
+ 'release_date': '2026-08-11',
  'source_version': '6',
  'purpose': 'Canonical prompt, skill, and Replit engine foundation kit with object-oriented instruction '
             'contracts.',
@@ -308,7 +308,7 @@ REQUEST_SCHEMA = {'$schema': 'https://json-schema.org/draft/2020-12/schema',
                                     'enum': ['full', 'minimal'],
                                     'description': 'Defaults to "full" (unchanged behavior). "minimal" trims required_references down to only the ones whose topic keywords appear in the request text/scope, always keeping replit.md and the active profile\'s business_file (see PROFILES[profile]["business_file"]), if it has one.'},
                 'profile': {'type': 'string',
-                           'description': 'Which PROFILES entry (protected paths, write roots) governs this request. Defaults to the OPSGATE_PROFILE environment variable if set, then manifests/profiles.json default_profile ("metco"), then "generic-replit" if neither resolves to a known profile. Set this (or OPSGATE_PROFILE) to "generic-replit" when this kit is dropped into a project other than the one it was built for.'}}}
+                           'description': 'Which PROFILES entry (protected paths, write roots) governs this request. Defaults to the OPSGATE_PROFILE environment variable if set, then manifests/profiles.json default_profile ("generic-replit"), then "generic-replit" if neither resolves to a known profile. Set this (or OPSGATE_PROFILE) to "metco" when this request is for the one project the kit was originally built for.'}}}
 
 DISTRIBUTIONS = {'claude': {'root': 'dist/claude',
              'copies': [['canonical/CLAUDE_PROJECT_INSTRUCTIONS.md', 'dist/claude/CLAUDE_PROJECT_INSTRUCTIONS.md'],
@@ -375,48 +375,6 @@ PROFILES = {'default_profile': 'generic-replit',
                                  'protected_policy': 'project_defined',
                                  'test_policy': 'risk_based_existing_scripts_only',
                                  'distribution': 'replit'}}}
-
-TEMPLATE_METADATA = {'templates/REPLIT_TASK_TEMPLATE.md': {'kind': 'replit_bounded_prompt',
-                                             'required_fields': ['outcome', 'scope.write_paths', 'acceptance'],
-                                             'optional_fields': ['module',
-                                                                 'scope.read_paths',
-                                                                 'must_not_change',
-                                                                 'authorizations'],
-                                             'final_output_policy': 'no_unresolved_placeholders'},
- 'templates/REPLIT_PHASED_IMPLEMENTATION_TEMPLATE.md': {'kind': 'replit_phased_prompt',
-                                                              'required_fields': ['outcome',
-                                                                                  'scope.write_paths',
-                                                                                  'acceptance'],
-                                                              'optional_fields': ['module',
-                                                                                  'scope.read_paths',
-                                                                                  'must_not_change',
-                                                                                  'authorizations'],
-                                                              'final_output_policy': 'phase_plan_plus_next_authorized_phase_only'},
- 'templates/BUSINESS_FILE_PROMPT_TEMPLATE.md': {'kind': 'business_artifact_prompt',
-                                                      'required_fields': ['outcome'],
-                                                      'optional_fields': ['module', 'acceptance', 'must_not_change'],
-                                                      'final_output_policy': 'polished_artifact_prompt'},
- 'templates/SPEC_FILE_PROMPT_TEMPLATE.md': {'kind': 'specification_artifact_prompt',
-                                                  'required_fields': ['outcome'],
-                                                  'optional_fields': ['module', 'acceptance', 'must_not_change'],
-                                                  'final_output_policy': 'polished_artifact_prompt'},
- 'templates/AUDIT_PROMPT_TEMPLATE.md': {'kind': 'audit_artifact_prompt',
-                                              'required_fields': ['outcome'],
-                                              'optional_fields': ['module',
-                                                                  'scope.read_paths',
-                                                                  'acceptance',
-                                                                  'must_not_change'],
-                                              'final_output_policy': 'read_only_audit_prompt'},
- 'templates/TASK_BACKLOG_PROMPT_TEMPLATE.md': {'kind': 'backlog_artifact_prompt',
-                                                     'required_fields': ['outcome'],
-                                                     'optional_fields': ['module', 'acceptance', 'must_not_change'],
-                                                     'final_output_policy': 'ordered_backlog_prompt'},
- 'templates/CHANGE_IMPROVEMENT_PROMPT_TEMPLATE.md': {'kind': 'change_record_prompt',
-                                                           'required_fields': ['outcome'],
-                                                           'optional_fields': ['module',
-                                                                               'acceptance',
-                                                                               'must_not_change'],
-                                                           'final_output_policy': 'controlled_change_record_prompt'}}
 
 RUN_STATE_SCHEMA = {'$schema': 'https://json-schema.org/draft/2020-12/schema',
  'title': 'Run State',
@@ -531,8 +489,6 @@ CONTRACTS = {
     'manifests/distributions.json': DISTRIBUTIONS,
 
     'manifests/profiles.json': PROFILES,
-
-    'manifests/template-metadata.json': TEMPLATE_METADATA,
 
     'manifests/run-state.schema.json': RUN_STATE_SCHEMA,
 

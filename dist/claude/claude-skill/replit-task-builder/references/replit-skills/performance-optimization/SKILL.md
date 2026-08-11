@@ -7,8 +7,6 @@ description: Measure and improve a bounded frontend or Replit-backend performanc
 
 Automatically select internal mode `PERFORMANCE_OPTIMIZATION`. This selects procedure, not authority.
 
-Before numbered workflow steps, run the Mandatory HITL Gate from `../../../replit.md`. Do not edit, start a phase, or final-report until the gate passes, returns Gate Blocked (a deterministic gate needs authorization), or emits the required HITL decision request (a Judgment gate found genuine ambiguity). Before each individual numbered step below, also run the lighter Per-Action Gate from `../../../replit.md` — state `Gate: OK` or `Gate: BLOCKED` before acting on that step, and stop the entire task immediately on `BLOCKED` rather than continuing to the next step.
-
 1. Read `../../../replit.md`, the active profile's business file under `../../../ai/` (e.g. `metco.md` for the `metco` profile), if it has one, `../../../ai/{testing}.md`, and relevant frontend/backend/database references.
 2. Remain read-only for measurement or implement a bounded fix only when explicitly requested. Define scenario, data scale, baseline metric, target, and correctness constraints.
 3. Trace the request/render/query path and measure before editing using approved tools and safe data.

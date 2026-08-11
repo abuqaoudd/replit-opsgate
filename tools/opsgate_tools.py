@@ -510,11 +510,13 @@ def cmd_preflight(argv):
         evidence.append("read_scope_default: direct owners, callers, and tests")
     if route.get("blocked"):
         failed_gates.append("capability_gate: missing_authority")
+    # Reuse matches_protected() (the exact same check cmd_check_paths uses) rather than a
+    # second, independently-drifting inline implementation - preflight and check-paths must
+    # agree on every path, not just usually agree.
     protected_patterns = protected_paths_for(request).get("never_access", [])
     for candidate in [*write_paths, *read_paths]:
         for pattern in protected_patterns:
-            token = normalize_pattern(pattern).rstrip("/")
-            if token and (token in candidate or candidate.startswith(token)):
+            if matches_protected(candidate, pattern):
                 failed_gates.append(f"protected_path_gate: {candidate}")
     # Every gate this function checks - scope, capability, protected-path - is deterministic:
     # a fixed rule evaluated against the request, with one correct answer and no judgment
@@ -1179,19 +1181,29 @@ Use the previous phase report as evidence, not authority.
 Resume from the next incomplete phase. Do not repeat completed discovery unless scoped drift is detected. Label checks PASSED, FAILED, or NOT RUN.""")
 
 
+_UNSAFE_RUN_ID_CHARS = re.compile(r"[^A-Za-z0-9_-]")
+
+
 def cmd_init_run(argv):
     if not argv:
         usage("Usage: python3 tools/init-run.py <request.json>")
     request = load_request(argv[0])
     route = route_request(request)
     run_id = request.get("id") or f"REQ-{int(_dt.datetime.now().timestamp() * 1000)}"
-    run_dir = ROOT_DIR / "runs" / run_id
+    # request["id"] is caller-controlled (including over the MCP server) and used as a runs/
+    # directory name below - strip anything but a single safe path segment's worth of
+    # characters so a value like "../../etc" can never resolve outside runs/.
+    safe_run_id = _UNSAFE_RUN_ID_CHARS.sub("_", str(run_id))
+    run_dir = ROOT_DIR / "runs" / safe_run_id
     run_dir.mkdir(parents=True, exist_ok=True)
     write_python_data(run_dir / "request.py", "REQUEST", request, "# Engine run request")
     write_python_data(run_dir / "route.py", "ROUTE", route, "# Engine run route")
     write_python_data(run_dir / "gate_result.py", "GATE_RESULT", {"request_id": run_id, "status": "blocked" if route.get("blocked") else "pending_preflight", "failed_gates": ["capability_gate"] if route.get("blocked") else [], "missing_authority": route.get("missing_authority") or []}, "# Engine run gate result")
     write_python_data(run_dir / "handoff.py", "HANDOFF", {"request_id": run_id, "completed": False, "next_phase_ready": False, "blockers": route.get("missing_authority") or [] if route.get("blocked") else []}, "# Engine run handoff")
-    print_json({"run_id": run_id, "run_dir": str(run_dir.relative_to(ROOT_DIR))})
+    result = {"run_id": run_id, "run_dir": str(run_dir.relative_to(ROOT_DIR))}
+    if safe_run_id != str(run_id):
+        result["run_dir_id_sanitized"] = True
+    print_json(result)
 
 
 def cmd_record_decision(argv):
@@ -1471,10 +1483,12 @@ def cmd_validate_kit(argv):
             fail(f"Skill frontmatter must contain only name and description: {relative}")
         if frontmatter.get("name") != skill_file.parent.name:
             fail(f"Skill folder/name mismatch: {relative}")
-        if "Mandatory HITL Gate" not in text:
-            fail(f"Skill missing Mandatory HITL Gate reminder: {relative}")
-        if "Per-Action Gate" not in text:
-            fail(f"Skill missing Per-Action Gate reminder: {relative}")
+        # The Mandatory HITL Gate and Per-Action Gate are defined once, authoritatively, in
+        # replit.md (see canonical/README-v6.md) - skills are not required to restate that
+        # reminder in their own words; every skill's step 1 pointing back to replit.md is
+        # what actually keeps them honoring it.
+        if "replit.md" not in text:
+            fail(f"Skill does not reference replit.md as authority: {relative}")
     routing = read_json("manifests/routing.manifest.json")
     for route in routing.get("replit_routes", []):
         assert_exists(f"canonical/references/replit-skills/{route['skill']}/SKILL.md")
@@ -1573,6 +1587,7 @@ def cmd_validate_kit(argv):
         run_python("check-capabilities", ["fixtures/routing/migration-task-missing-auth.json"], expect=1)
         run_python("validate-json", ["manifests/request.schema.json", "fixtures/routing/frontend-task.json"])
         run_python("validate-json", ["manifests/report.schema.json", "fixtures/reports/parsed-sample-report.json"])
+        run_python("validate-json", ["manifests/run-state.schema.json", "state:ready-phased-state"])
         for fixture in opsgate_fixtures.HITL_FIXTURES:
             run_python("validate-json", ["manifests/hitl.schema.json", fixture["path"]])
         run_python("lint-prompt", ["fixtures/prompts/invalid-missing-hitl-options.md"], expect=1)
@@ -1656,9 +1671,11 @@ def cmd_test_all(argv):
         try_run(f"preflight {path}", "preflight", [path], expect_exit=expect_blocked)
         try_run(f"check-capabilities {path}", "check-capabilities", [path], expect_exit=expect_blocked)
 
-    # 3. Every HITL fixture must validate against the HITL schema.
+    # 3. Every HITL fixture must validate against the HITL schema, and the ready-phased-state
+    #    fixture must validate against the run-state schema (previously declared, never checked).
     for fixture in opsgate_fixtures.HITL_FIXTURES:
         try_run(f"validate-json (hitl) {fixture['path']}", "validate-json", ["manifests/hitl.schema.json", fixture["path"]])
+    try_run("validate-json (run-state) state:ready-phased-state", "validate-json", ["manifests/run-state.schema.json", "state:ready-phased-state"])
 
     # 4. Positive and negative report/prompt lint fixtures.
     try_run("parse-report sample", "parse-report", ["fixtures/reports/sample-replit-final-report.md"])

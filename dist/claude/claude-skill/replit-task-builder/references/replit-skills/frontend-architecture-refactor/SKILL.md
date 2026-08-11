@@ -7,8 +7,6 @@ description: Perform an explicitly approved frontend architecture refactor in th
 
 Automatically select internal mode `FRONTEND_ARCHITECTURE_REFACTOR`. This selects procedure; explicit broad-refactor authority remains required.
 
-Before numbered workflow steps, run the Mandatory HITL Gate from `../../../replit.md`. Do not edit, start a phase, or final-report until the gate passes, returns Gate Blocked (a deterministic gate needs authorization), or emits the required HITL decision request (a Judgment gate found genuine ambiguity). Before each individual numbered step below, also run the lighter Per-Action Gate from `../../../replit.md` — state `Gate: OK` or `Gate: BLOCKED` before acting on that step, and stop the entire task immediately on `BLOCKED` rather than continuing to the next step.
-
 1. Read `../../../replit.md`, the active profile's business file under `../../../ai/` (e.g. `metco.md` for the `metco` profile), if it has one, and `../../../ai/{frontend,refactoring,ui-ux,testing,agents}.md`.
 2. Require explicit broad-refactor authority; name the exact source tree and exclusions.
 3. Capture scoped baseline, same-method metrics, architecture inventory, current failures, and pre-existing changes.

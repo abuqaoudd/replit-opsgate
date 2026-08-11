@@ -7,8 +7,6 @@ description: Perform scoped QA, regression checks, code/security review, or read
 
 Automatically select internal mode `SAFE_VERIFICATION`. This selects a read-only procedure and grants no fix authority.
 
-Before numbered workflow steps, run the Mandatory HITL Gate from `../../../replit.md`. Do not edit, start a phase, or final-report until the gate passes, returns Gate Blocked (a deterministic gate needs authorization), or emits the required HITL decision request (a Judgment gate found genuine ambiguity). Before each individual numbered step below, also run the lighter Per-Action Gate from `../../../replit.md` — state `Gate: OK` or `Gate: BLOCKED` before acting on that step, and stop the entire task immediately on `BLOCKED` rather than continuing to the next step.
-
 1. Read `../../../replit.md`, the active profile's business file under `../../../ai/` (e.g. `metco.md` for the `metco` profile), if it has one, and `../../../ai/{testing}.md`; add only relevant domain references.
 2. State whether this is post-implementation verification or a requested read-only audit, plus exact paths and acceptance criteria.
 3. Capture scoped status/diff and inspect only approved paths.

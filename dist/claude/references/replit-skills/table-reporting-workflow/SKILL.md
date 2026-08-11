@@ -7,8 +7,6 @@ description: Build or improve operational tables, lists, dashboards, filters, se
 
 Automatically select internal mode `TABLE_REPORTING_IMPLEMENTATION`. This selects procedure, not authority.
 
-Before numbered workflow steps, run the Mandatory HITL Gate from `../../../replit.md`. Do not edit, start a phase, or final-report until the gate passes, returns Gate Blocked (a deterministic gate needs authorization), or emits the required HITL decision request (a Judgment gate found genuine ambiguity). Before each individual numbered step below, also run the lighter Per-Action Gate from `../../../replit.md` — state `Gate: OK` or `Gate: BLOCKED` before acting on that step, and stop the entire task immediately on `BLOCKED` rather than continuing to the next step.
-
 1. Read `../../../replit.md` and the active profile's business file under `../../../ai/` (e.g. `metco.md` for the `metco` profile), if it has one, relevant `../../../ai/{frontend,ui-ux,testing,backend,database,security}.md` files.
 2. Define columns/metrics, actors and data scope, filters, sort allowlist/default, pagination, actions, export limits if already supported, and all observable states.
 3. Trace shared table/report components, URL/query state, feature service/hook/types, endpoint filters/sorts, repository bounds, and tests.

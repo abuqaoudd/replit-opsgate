@@ -7,8 +7,6 @@ description: Implement or debug bounded Replit API routes, middleware, validatio
 
 Automatically select internal mode `API_IMPLEMENTATION`. This selects procedure, not authority.
 
-Before numbered workflow steps, run the Mandatory HITL Gate from `../../../replit.md`. Do not edit, start a phase, or final-report until the gate passes, returns Gate Blocked (a deterministic gate needs authorization), or emits the required HITL decision request (a Judgment gate found genuine ambiguity). Before each individual numbered step below, also run the lighter Per-Action Gate from `../../../replit.md` — state `Gate: OK` or `Gate: BLOCKED` before acting on that step, and stop the entire task immediately on `BLOCKED` rather than continuing to the next step.
-
 1. Read `../../../replit.md`, the active profile's business file under `../../../ai/` (e.g. `metco.md` for the `metco` profile), if it has one, and `../../../ai/{backend,testing}.md`; add database/security references when triggered.
 2. State endpoint, contract, roles/object scope, exact paths, capability gates, and stop conditions.
 3. Capture scoped Git status/diff. Trace route → middleware/validation → service → repository → mapper/tests.
