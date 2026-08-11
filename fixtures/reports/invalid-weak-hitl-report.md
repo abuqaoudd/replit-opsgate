@@ -4,7 +4,7 @@ Done.
 
 # Files Changed
 
-- `artifacts/metco/src/features/vendor-approvals/VendorApprovalPage.tsx`
+- `src/features/vendor-approvals/VendorApprovalPage.tsx`
 
 # HITL Gate Result
 

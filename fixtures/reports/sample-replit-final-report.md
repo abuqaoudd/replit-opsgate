@@ -4,16 +4,16 @@ Vendor approval loading and error states were updated.
 
 # Files Changed
 
-- file: `artifacts/metco/src/features/vendor-approvals/VendorApprovalPage.tsx`
-- file: `artifacts/metco/src/features/vendor-approvals/useVendorApprovals.ts`
+- file: `src/features/vendor-approvals/VendorApprovalPage.tsx`
+- file: `src/features/vendor-approvals/useVendorApprovals.ts`
 
 # HITL Gate Result
 
 | Check | Answer | Evidence |
 |---|---|---|
-| Is the exact owner/path known? | YES | `artifacts/metco/src/features/vendor-approvals/VendorApprovalPage.tsx` and `useVendorApprovals.ts` identified as owners |
-| Is the write scope explicitly authorized? | YES | Request scope limited writes to `artifacts/metco/src/features/vendor-approvals/**` |
-| Are protected paths excluded? | YES | No `metco-api/**` or `pipeline/**` paths were opened, searched, or changed |
+| Is the exact owner/path known? | YES | `src/features/vendor-approvals/VendorApprovalPage.tsx` and `useVendorApprovals.ts` identified as owners |
+| Is the write scope explicitly authorized? | YES | Request scope limited writes to `src/features/vendor-approvals/**` |
+| Are protected paths excluded? | YES | No `internal-api/**` or `build-pipeline/**` paths were opened, searched, or changed |
 | Are package/config/schema/seed/destructive changes needed? | NO | Change only touched loading and error handling in existing frontend files |
 | If risky changes are needed, are they explicitly authorized? | NA | No package, config, schema, seed, destructive, or generated-file changes were needed |
 | Are there two materially valid implementation choices? | NO | Existing vendor approvals hook/component ownership selected the implementation path |

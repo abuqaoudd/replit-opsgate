@@ -1,11 +1,11 @@
-# METCO Vendor approvals
+# Vendor approvals
 
 ## Scope
 
 | Access | Paths |
 |---|---|
-| Write | `artifacts/metco/src/features/vendor-approvals/**` |
-| Never access | `metco-api/**`, `pipeline/**` |
+| Write | `src/features/vendor-approvals/**` |
+| Never access | `internal-api/**`, `build-pipeline/**` |
 
 ## Mandatory HITL Gate
 
@@ -20,8 +20,8 @@ Blocked check: Is the exact owner/path known?
 Question: Which existing vendor approvals owner should receive the loading-state change?
 Evidence checked: scoped feature paths and direct vendor approvals references
 Options:
-A. Existing page owner - resume in `artifacts/metco/src/features/vendor-approvals/VendorApprovalPage.tsx`
-B. Existing hook owner - resume in `artifacts/metco/src/features/vendor-approvals/useVendorApprovals.ts`
+A. Existing page owner - resume in `src/features/vendor-approvals/VendorApprovalPage.tsx`
+B. Existing hook owner - resume in `src/features/vendor-approvals/useVendorApprovals.ts`
 Exact resume point: phase 1 ownership selection before editing
 Required reply: DECIDE HITL-vendor-approvals-P1-Q1: answer and exact scope
 

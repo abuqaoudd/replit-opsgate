@@ -1,6 +1,6 @@
 # Generated engine release hashes
 
-RELEASE_HASHES = {'generated_at': '2026-08-10T10:35:18.639449Z',
+RELEASE_HASHES = {'generated_at': '2026-08-11T08:29:07.373671Z',
  'files': [{'path': 'dist/claude/CLAUDE_PROJECT_INSTRUCTIONS.md',
             'sha256': '8d798ab3252081c21069c0cc36f81bb0cf22743e84a170c5d4933bd682122042'},
            {'path': 'dist/claude/claude-skill/kit-maintainer.zip',
@@ -126,7 +126,7 @@ RELEASE_HASHES = {'generated_at': '2026-08-10T10:35:18.639449Z',
            {'path': 'dist/claude/examples/gold-standard/hitl-resume-example.md',
             'sha256': '286fbcae764d8c62696ccb6e6f2b1ef6a48829993905f64212b0033131a0ae2d'},
            {'path': 'dist/claude/examples/gold-standard/parseable-final-report-example.md',
-            'sha256': '19a583074af0a77b8f3523bc30db182074dfa35e457cf75bdd4f81bf94640f57'},
+            'sha256': 'e38e58cce3b3c821f8638559ab3337dfc355faf2509ae72de493bed14821471e'},
            {'path': 'dist/claude/references/ai/agents.md',
             'sha256': '92b06b20782fa34b29de8de370dec57cf0d650c10c4ec09a2b41b6a078f1c4a3'},
            {'path': 'dist/claude/references/ai/backend.md',
