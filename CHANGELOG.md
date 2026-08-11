@@ -1,5 +1,14 @@
 # Changelog
 
+## 6.0.19 The Agent Fills In the Template, the User Never Touches It - 2026-08-11
+
+- User feedback on 6.0.18: `PROJECT_SETUP_TEMPLATE.md` and `replit.md`'s "First-run setup check" still framed filling in the template as something the user could do themselves ("ask conversationally... or let the user edit the file directly"). The ask: the user should never open or edit `PROJECT_SETUP.md` at all - the Agent asks the questions and writes every answer into the file itself.
+- Rewrote `canonical/templates/PROJECT_SETUP_TEMPLATE.md`'s intro to address the Agent directly: work through the fields, ask the user about each one in your own words (don't paste the headings or dump the file at them), write their answer into the file yourself in place of the `[FILL IN: ...]` text, and leave a field's placeholder in place rather than guessing if the user doesn't know yet. The per-field guidance text underneath each heading is unchanged - it already read fine as "what to ask about" regardless of who holds the pen.
+- Updated `replit.md`'s "First-run setup check" steps 2-3 and `canonical/README-v6.md`'s setup-process walkthrough to match: dropped "or let the user edit the file directly" as a co-equal option: the Agent is now the sole writer of `PROJECT_SETUP.md`, always.
+- Updated `tools/apply-setup.py`'s docstring accordingly ("the Agent asks the user... the user is never expected to edit PROJECT_SETUP.md directly").
+- No change to the parsing mechanism itself (`<!-- key: ... -->` markers, `tools/apply-setup.py`'s field extraction) - confirmed all 12 fields still parse correctly from the rewritten template, since only the framing prose changed, not the field structure. This is a documentation/instruction-wording change with no functional risk to `opsgate.profile.json`/business-file generation; re-ran the full `build-distributions.py` + `build-replit-install.py` + `test-all.py` (62/62) + `validate-kit.py` (0 warnings) cycle in an isolated `/tmp` copy anyway, as a matter of course.
+- `METCO-test-local` was not touched.
+
 ## 6.0.18 Setup Should Be Something Replit Runs, Not a CLI Command a Human Types (6.0.18) - 2026-08-11
 
 - Further user feedback on 6.0.17: writing a project's own profile outside the engine was the right direction, but the actual mechanism - a human running `tools/init-profile.py` with technical CLI flags (`--frontend-root`, `--target-root`) - still treated the engine like project files you operate by hand, not like a library. The ask: onboarding should be a setup process the Replit Agent itself runs, driven by a plain-language fill-in template, with the answers baked directly into the real `replit.md`/`ai/**` text the Agent reads - not left in a side JSON file referenced only abstractly.

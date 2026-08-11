@@ -66,7 +66,7 @@ This only applies when the engine itself is vendored into the project (as a subm
 When the engine is vendored, this is meant to be run by the Replit Agent itself, not typed by hand - `replit.md`'s own "First-run setup check" (its very first section) tells the Agent exactly this, automatically, the first time it works on a project that hasn't been set up yet:
 
 1. Copy `canonical/templates/PROJECT_SETUP_TEMPLATE.md` to the project root as `PROJECT_SETUP.md` - one plain-language fill-in form covering the profile key, project name, frontend/backend roots, extra protected paths, and the same Business Facts questions `ai/metco.md` answers (roles, lifecycle, ID formats, key business rules, design system, known drift).
-2. Fill it in conversationally with the user (or let them edit the file directly).
+2. Ask the user about each field conversationally, in your own words, and write their answers into the file yourself - it is written for you to fill in, not for the user to edit directly.
 3. Run `python3 <engine-dir>/tools/apply-setup.py --template PROJECT_SETUP.md --target-root .`
 
 That one command writes, all at the project's own root:

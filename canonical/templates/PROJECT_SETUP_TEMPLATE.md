@@ -1,16 +1,25 @@
-# Project Setup
+# Project Setup (filled in by the Replit Agent, not the user)
 
-Fill in every field below, then run:
+This file is for you, the Agent, to fill in - the user is never expected to open or edit it
+themselves. Work through the fields below: ask the user about each one in your own words, as a
+normal conversation (don't paste these headings or dump the whole file at them), and write their
+answer into this file yourself as you go, directly below that field's `<!-- key: ... -->` marker,
+in place of the `[FILL IN: ...]` text. Keep every `<!-- key: ... -->` marker exactly as it is - it
+is how `tools/apply-setup.py` finds each answer afterward.
+
+If the user doesn't know an answer yet, leave that field's `[FILL IN: ...]` text in place rather
+than guessing on their behalf - it can be filled in and setup re-run later. Group related
+questions together where it reads naturally (e.g. ask the Business Facts questions as one
+conversation rather than one at a time), but write each answer into its own field regardless of
+how the questions were asked.
+
+Once every field the user was able to answer is filled in, run:
 
 ```
 python3 <engine-dir>/tools/apply-setup.py --template PROJECT_SETUP.md --target-root .
 ```
 
-from this project's root (see `replit.md`'s "First-run setup check" for the full walkthrough). Each field
-has a machine-readable `<!-- key: ... -->` marker right above it - keep that marker in place exactly as
-it is; only replace the `[FILL IN: ...]` text below each one. Leave a field's `[FILL IN: ...]` text
-untouched (don't guess) if you genuinely don't know the answer yet - it can be filled in and this setup
-re-run later.
+from this project's root (see `replit.md`'s "First-run setup check" for the full walkthrough).
 
 ## Profile key
 
