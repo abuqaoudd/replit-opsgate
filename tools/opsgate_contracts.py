@@ -1,7 +1,7 @@
 # Generated engine contracts (Replit OpsGate). Edit this file instead of standalone JSON manifests.
 
 KIT_MANIFEST = {'name': 'replit-opsgate',
- 'version': '6.0.15',
+ 'version': '6.0.16',
  'release_date': '2026-08-10',
  'source_version': '6',
  'purpose': 'Canonical prompt, skill, and Replit engine foundation kit with object-oriented instruction '
@@ -28,7 +28,8 @@ KIT_MANIFEST = {'name': 'replit-opsgate',
               'audit_engine': 'python3 tools/audit-engine.py [project-root]',
               'init_run': 'python3 tools/init-run.py <request.json>',
               'record_decision': 'python3 tools/record-decision.py <HITL-ID> <answer and exact scope>',
-              'show_profile': 'python3 tools/show-profile.py [request.json]'},
+              'show_profile': 'python3 tools/show-profile.py [request.json]',
+              'init_profile': 'python3 tools/init-profile.py --profile <name> --frontend-root <path> [--backend-root <path>] [--extra-never-access <glob>]...'},
  'release_acceptance': ['canonical distribution mappings pass',
                         'Replit skill metadata is valid',
                         'protected path rules remain present',

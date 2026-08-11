@@ -1,6 +1,6 @@
 # Generated engine release hashes
 
-RELEASE_HASHES = {'generated_at': '2026-08-11T08:29:07.373671Z',
+RELEASE_HASHES = {'generated_at': '2026-08-11T09:32:36.348441Z',
  'files': [{'path': 'dist/claude/CLAUDE_PROJECT_INSTRUCTIONS.md',
             'sha256': '8d798ab3252081c21069c0cc36f81bb0cf22743e84a170c5d4933bd682122042'},
            {'path': 'dist/claude/claude-skill/kit-maintainer.zip',

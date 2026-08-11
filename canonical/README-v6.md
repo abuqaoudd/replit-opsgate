@@ -55,15 +55,35 @@ For an upgrade from version 5.5 to 6, replace `replit.md`, all `ai/**` files, an
 
 ## Adopting this kit in a different Replit project
 
-This kit was originally built for one project (the `metco` profile in `manifests/profiles.json`), whose protected paths (`metco-api/**`, `pipeline/**`) and write roots are specific to that project. Dropping a submodule or vendored copy of this kit into a different Replit project without any change still works, but inherits those project-specific paths, which are meaningless - and can be misleading - anywhere else.
+This kit ships with two profiles out of the box: `generic-replit` (the default - universal protections only, no project-specific paths) and `metco` (the first adopting project's own profile, with its own protected trees and business file). Dropping a submodule or vendored copy of this kit into a different Replit project without any change already works under `generic-replit`, but a project that wants its own write roots, its own extra protected paths, or its own business-file ground truth needs its own profile.
 
-To adopt it elsewhere:
+### Setup process: `tools/init-profile.py`
 
-1. Set the `OPSGATE_PROFILE` environment variable (a Repl Secret is the usual place) to `generic-replit`. This switches `route-request.py`, `preflight.py`, and `check-paths.py` to a profile with only universal protections (`.git/**`, `.env`, `node_modules/**`, `.github/workflows/**`, `.claude/**`, `.agents/memory/**`) and none of the original project's specific ones.
-2. If the new project has its own protected trees that deserve the same treatment `metco-api/**`/`pipeline/**` get in the original profile, add a new entry to `PROFILES` and `PROTECTED_PATHS` in `tools/opsgate_contracts.py` (copy the `generic-replit` entry as a starting point) rather than editing the `metco` entry or hardcoding the new paths into `generic-replit` - a profile should describe one project's own paths, not accumulate every adopting project's paths in one shared bucket.
-3. `OPSGATE_PROFILE` can also be set per-request via an optional `"profile"` field on the request JSON itself, which takes precedence over everything except the environment variable - useful for testing a profile without changing the environment.
+Running the kit against a new project is not a one-line env var and a hand-edit - it is a real setup step with two outputs (a profile entry and a business file), so it is automated as one command instead of a checklist to follow by hand:
+
+```
+python3 tools/init-profile.py --profile acme --frontend-root client/src --backend-root server/src
+```
+
+This does two things in one pass, then verifies the result actually imports and resolves correctly before writing anything to disk:
+
+1. Appends a new entry to both `PROFILES` and `PROTECTED_PATHS` in `tools/opsgate_contracts.py` - the new profile's own `frontend_root`/`backend_root` become its `normal_write_paths`, and any `--extra-never-access <glob>` (repeatable) is added on top of the same universal baseline every profile gets (`.git/**`, `.env`, `node_modules/**`, `.github/workflows/**`, `.claude/**`, `.agents/memory/**`). It never edits an existing profile - re-running with a profile key that already exists refuses and tells you to edit it by hand.
+2. Generates a starter business file (default `canonical/references/ai/<profile>.md`, matching the new `business_file` field) from the same template structure `ai/metco.md` follows - Responsibility, Activation, Inputs, a `## Business Facts` section left as fill-in placeholders, `Must Not`, `Start record`, `Workflow`, `Output Evidence` - so the new project's business ground truth has one obvious place to live instead of needing to be reverse-engineered from `ai/metco.md`'s example.
+
+After running it: fill in the generated business file's `## Business Facts` section with the new project's real domain facts, then `python3 tools/build-distributions.py && python3 tools/validate-kit.py`, then set `OPSGATE_PROFILE=acme` (a Repl Secret is the usual place) or pass `"profile": "acme"` on individual requests - the request field takes precedence over the environment variable, which is useful for testing a profile without changing the environment.
+
+### Doing it by hand instead
+
+If you'd rather not run the script - or need something the flags don't cover - the two things it automates can be done directly:
+
+1. Add a new entry to `PROFILES` and `PROTECTED_PATHS` in `tools/opsgate_contracts.py` (copy the `generic-replit` entry as a starting point) rather than editing the `metco` entry or hardcoding the new paths into `generic-replit` - a profile should describe one project's own paths, not accumulate every adopting project's paths in one shared bucket.
+2. Write `canonical/references/ai/<profile>.md` following the same structure as `ai/metco.md`, and point the new profile's `business_file` field at it.
 
 Everything else in the kit - routing, capability gates, the HITL protocol, the lexical scoring/tie detection, MCP tool wiring - is already project-agnostic and needs no change to adopt elsewhere.
+
+### Why `ai/*.md` files mention "protected paths" without listing any
+
+Files under `ai/` (`backend.md`, `database.md`, `maintenance.md`, and the rest, including each project's own business file like `ai/metco.md`) use "protected", "locked", and "restricted" only as behavioral vocabulary - instructions like "do not touch protected paths without authorization." None of them declare or duplicate an actual glob list. The one and only source of truth for what counts as protected on a given profile is `PROTECTED_PATHS`/`protected_paths_for(request)` in `tools/opsgate_contracts.py`; every `ai/*.md` reference to "protected" defers to whatever that function resolves for the active profile, so there is nothing to keep in sync by hand when a profile's protected paths change.
 
 ## Maintenance
 
