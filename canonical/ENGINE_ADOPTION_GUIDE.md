@@ -11,9 +11,9 @@ This engine turns project requests into detailed business files, implementation 
 - `references/replit-skills/`: Replit Agent workflows for focused scenarios.
 - `specifications/`: detailed normative architecture, mode, routing, artifact, execution, HITL, and distribution specifications.
 - `examples/`: compact example output.
-- `claude-skill/project-prompt-router/`: selects the correct artifact template.
-- `claude-skill/replit-task-builder/`: builds bounded or phased Replit prompts.
-- `claude-skill/*.zip`: packaged skills.
+- `claude-skills/project-prompt-router/`: selects the correct artifact template.
+- `claude-skills/replit-task-builder/`: builds bounded or phased Replit prompts.
+- `claude-skills/*.zip`: packaged skills.
 
 ## Setup
 
@@ -32,7 +32,7 @@ Copy:
 - `references/ai/**` to project-root `ai/**`
 - `references/replit-skills/**` to project-root `.agents/skills/**`
 
-For an upgrade from version 5.5 to 6, replace `replit.md`, all `ai/**` files, and all `.agents/skills/**` folders because automatic mode selection is distributed across the root, domain references, and scenario skills. Do not copy `templates/`, `specifications/`, `CLAUDE_PROJECT_INSTRUCTIONS.md`, or `claude-skill/` into Replit; those generate and validate prompts on the Claude side.
+For an upgrade from version 5.5 to 6, replace `replit.md`, all `ai/**` files, and all `.agents/skills/**` folders because automatic mode selection is distributed across the root, domain references, and scenario skills. Do not copy `templates/`, `specifications/`, `CLAUDE_PROJECT_INSTRUCTIONS.md`, or `claude-skills/` into Replit; those generate and validate prompts on the Claude side.
 
 ## Design
 

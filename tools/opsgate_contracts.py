@@ -1,7 +1,7 @@
 # Generated engine contracts (Replit OpsGate). Edit this file instead of standalone JSON manifests.
 
 ENGINE_MANIFEST = {'name': 'replit-opsgate',
- 'version': '6.0.33',
+ 'version': '6.0.34',
  'release_date': '2026-08-16',
  'source_version': '6',
  'purpose': 'Canonical prompt, skill, and Replit engine foundation with object-oriented instruction '
@@ -318,7 +318,7 @@ DISTRIBUTIONS = {'claude': {'root': 'dist/claude',
                         ['canonical/specifications', 'dist/claude/specifications'],
                         ['canonical/examples', 'dist/claude/examples']],
              'skill_packages': ['project-prompt-router', 'replit-task-builder', 'engine-maintainer', 'mcp-integration'],
-             # Sources copied into dist/claude/claude-skill/<target>. Shared by build-distributions.py
+             # Sources copied into dist/claude/claude-skills/<target>. Shared by build-distributions.py
              # (which writes these) and validate-engine.py (which checks canonical/dist byte-identity),
              # so this is the single source of truth for the skill-package reference copy map.
              'skill_reference_mappings': [

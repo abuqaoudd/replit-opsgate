@@ -81,7 +81,7 @@ def cmd_validate_engine(argv):
     distributions = read_json("manifests/distributions.json")
     drift_pairs = [
         *distributions["claude"]["copies"],
-        *[[source, f"dist/claude/claude-skill/{target}"] for source, target in distributions["claude"]["skill_reference_mappings"]],
+        *[[source, f"dist/claude/claude-skills/{target}"] for source, target in distributions["claude"]["skill_reference_mappings"]],
         *distributions["replit"]["copies"],
     ]
     for source, target in drift_pairs:

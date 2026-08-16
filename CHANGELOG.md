@@ -1,5 +1,11 @@
 # Changelog
 
+## 6.0.34 dist/claude/claude-skill/ Renamed To claude-skills/ - 2026-08-16
+
+- User-requested follow-up to a broader repo-structure audit. The generated distribution directory was singular (`dist/claude/claude-skill/`) while the canonical source directory it's built from is plural (`canonical/claude-skills/`) - a naming mismatch that's existed since the directory was introduced, used consistently everywhere (not drift), but reads like a typo the first time source and output sit side by side.
+- Changed the one place the path is actually constructed - `cmd_build_distributions`'s `claude_root = ROOT_DIR / "dist/claude/claude-skill"` in `tools/opsgate_packaging.py` - to `"dist/claude/claude-skills"`, plus the parallel path built independently in `opsgate_selftest.py`'s `DIST-006` drift check and a comment in `opsgate_contracts.py`. Updated the four prose mentions in `canonical/ENGINE_ADOPTION_GUIDE.md`. Left `CHANGELOG.md`'s historical entries alone - they describe the directory name that was actually true at the time.
+- Verified: rebuilt distributions and confirmed the old `dist/claude/claude-skill/` directory is gone entirely (not left alongside the new one - `cmd_build_distributions` wipes `dist/claude/` before rebuilding) and `dist/claude/claude-skills/` contains the full four-package tree. `validate-engine.py`: 0 warnings. `test-all.py`: 63/63 (including the `DIST-006` byte-identity check now pointed at the corrected path).
+
 ## 6.0.33 opsgate_tools.py Renamed To opsgate.py - 2026-08-16
 
 - User-requested follow-up to 6.0.30. `opsgate_tools.py` reads like a library module name, not a CLI entrypoint, even though it's the only file left that a user or `mcp-server/opsgate_mcp_server.py` ever invokes directly. Renamed to `opsgate.py` so the one command a person actually types (`python3 tools/opsgate.py <command>`) has a name that says what it is.

@@ -109,7 +109,7 @@ def cmd_build_distributions(argv):
         copy_recursive(ROOT_DIR / source, ROOT_DIR / target)
     for source, target in distributions["replit"]["copies"]:
         copy_recursive(ROOT_DIR / source, ROOT_DIR / target)
-    claude_root = ROOT_DIR / "dist/claude/claude-skill"
+    claude_root = ROOT_DIR / "dist/claude/claude-skills"
     copy_recursive(ROOT_DIR / "canonical/claude-skills", claude_root)
     for source, target in distributions["claude"]["skill_reference_mappings"]:
         copy_recursive(ROOT_DIR / source, claude_root / target)
