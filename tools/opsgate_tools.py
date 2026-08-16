@@ -6,9 +6,10 @@ validation, profile resolution, packaging, and self-testing together. It's now s
 focused sibling modules (opsgate_profiles, opsgate_io, opsgate_routing, opsgate_prompts,
 opsgate_validation, opsgate_packaging, opsgate_selftest) - this file is what's left once those
 concerns move out: the actual cmd_* command handlers (each one thin, orchestrating calls into
-the modules above) plus the COMMANDS dispatch table every tools/<name>.py CLI wrapper and
-mcp-server/opsgate_mcp_server.py both rely on. Every function body below is unchanged from
-where it used to live - this is a structural reorganization, not a rewrite.
+the modules above) plus the COMMANDS dispatch table this file's own CLI entrypoint (`python3
+tools/opsgate_tools.py <command> [args...]`) and mcp-server/opsgate_mcp_server.py both rely on.
+Every function body below is unchanged from where it used to live - this is a structural
+reorganization, not a rewrite.
 """
 import datetime as _dt
 import json
@@ -29,13 +30,13 @@ from opsgate_selftest import cmd_test_all, cmd_validate_engine
 
 def cmd_route_request(argv):
     if not argv:
-        usage("Usage: python3 tools/route-request.py <request.json>")
+        usage("Usage: python3 tools/opsgate_tools.py route-request <request.json>")
     print_json(route_request(load_request(argv[0])))
 
 
 def cmd_check_capabilities(argv):
     if not argv:
-        usage("Usage: python3 tools/check-capabilities.py <request.json>")
+        usage("Usage: python3 tools/opsgate_tools.py check-capabilities <request.json>")
     request = load_request(argv[0])
     route = route_request(request)
     gates = read_json("manifests/capability-gates.json")
@@ -86,7 +87,7 @@ def cmd_show_profile(argv):
 
 def cmd_check_paths(argv):
     if not argv:
-        usage("Usage: python3 tools/check-paths.py <request.json>")
+        usage("Usage: python3 tools/opsgate_tools.py check-paths <request.json>")
     request = load_request(argv[0])
     protected_paths = protected_paths_for(request)
     scope = request.get("scope") or {}
@@ -104,7 +105,7 @@ def cmd_check_paths(argv):
 
 def cmd_preflight(argv):
     if not argv:
-        usage("Usage: python3 tools/preflight.py <request.json>")
+        usage("Usage: python3 tools/opsgate_tools.py preflight <request.json>")
     request = load_request(argv[0])
     route = route_request(request)
     gates = read_json("manifests/gates.json")
@@ -152,7 +153,7 @@ def cmd_preflight(argv):
 
 def cmd_compile_prompt(argv):
     if not argv:
-        usage("Usage: python3 tools/compile-prompt.py <request.json>")
+        usage("Usage: python3 tools/opsgate_tools.py compile-prompt <request.json>")
     request = load_request(argv[0])
     route = route_request(request)
     prompt = compile_replit_prompt(request, route) if route.get("deliverable") == "replit_prompt" else compile_artifact_prompt(request, route)
@@ -161,7 +162,7 @@ def cmd_compile_prompt(argv):
 
 def cmd_init_state(argv):
     if not argv:
-        usage("Usage: python3 tools/init-state.py <request.json>")
+        usage("Usage: python3 tools/opsgate_tools.py init-state <request.json>")
     request = load_request(argv[0])
     route = route_request(request)
     state = {
@@ -203,7 +204,7 @@ def cmd_init_state(argv):
 
 def cmd_parse_report(argv):
     if not argv:
-        usage("Usage: python3 tools/parse-report.py <report.md>")
+        usage("Usage: python3 tools/opsgate_tools.py parse-report <report.md>")
     text = Path(argv[0]).resolve().read_text(encoding="utf-8")
     lines = re.split(r"\r?\n", text)
 
@@ -245,7 +246,7 @@ def cmd_parse_report(argv):
 
 def cmd_lint_report(argv):
     if not argv:
-        usage("Usage: python3 tools/lint-report.py <report.md>")
+        usage("Usage: python3 tools/opsgate_tools.py lint-report <report.md>")
     text = Path(argv[0]).resolve().read_text(encoding="utf-8")
     # Sourced from GATES['gates']['final_report_gate']['required_sections'] rather than a
     # second hardcoded copy - the two lists were already identical, just independently
@@ -300,7 +301,7 @@ def cmd_lint_report(argv):
 
 def cmd_lint_prompt(argv):
     if not argv:
-        usage("Usage: python3 tools/lint-prompt.py <prompt.md>")
+        usage("Usage: python3 tools/opsgate_tools.py lint-prompt <prompt.md>")
     text = Path(argv[0]).resolve().read_text(encoding="utf-8")
 
     # Every real Replit prompt in this engine must state these six concepts, but the exact
@@ -369,7 +370,7 @@ _INTAKE_DELIVERABLE_SIGNALS = [
 def cmd_intake_request(argv):
     text = " ".join(argv)
     if not text:
-        usage('Usage: python3 tools/intake-request.py "<plain language request>"')
+        usage('Usage: python3 tools/opsgate_tools.py intake-request "<plain language request>"')
     scored = [(deliverable, opsgate_lexer.lexical_score(text, signals)[0]) for deliverable, signals in _INTAKE_DELIVERABLE_SIGNALS]
     best_score, tied = opsgate_lexer.top_candidates(scored)
     if best_score <= 0:
@@ -405,7 +406,7 @@ def cmd_intake_request(argv):
 
 def cmd_next_phase_prompt(argv):
     if len(argv) < 2:
-        usage("Usage: python3 tools/next-phase-prompt.py <run-state.json> <parsed-report.json>")
+        usage("Usage: python3 tools/opsgate_tools.py next-phase-prompt <run-state.json> <parsed-report.json>")
     state = load_data(argv[0])
     report = load_data(argv[1])
     next_phase = next((phase for phase in state.get("phases", []) if phase.get("status") in ["planned", "ready"]), None)
@@ -451,7 +452,7 @@ _UNSAFE_RUN_ID_CHARS = re.compile(r"[^A-Za-z0-9_-]")
 
 def cmd_init_run(argv):
     if not argv:
-        usage("Usage: python3 tools/init-run.py <request.json>")
+        usage("Usage: python3 tools/opsgate_tools.py init-run <request.json>")
     request = load_request(argv[0])
     route = route_request(request)
     run_id = request.get("id") or f"REQ-{int(_dt.datetime.now().timestamp() * 1000)}"
@@ -473,7 +474,7 @@ def cmd_init_run(argv):
 
 def cmd_record_decision(argv):
     if len(argv) < 2:
-        usage("Usage: python3 tools/record-decision.py <HITL-ID> <answer and exact scope>")
+        usage("Usage: python3 tools/opsgate_tools.py record-decision <HITL-ID> <answer and exact scope>")
     entry = {"recorded_at": _dt.datetime.now(_dt.timezone.utc).isoformat().replace("+00:00", "Z"), "id": argv[0], "answer": " ".join(argv[1:])}
     decisions = ROOT_DIR / "runs" / "decisions.pylog"
     decisions.parent.mkdir(parents=True, exist_ok=True)
@@ -484,7 +485,7 @@ def cmd_record_decision(argv):
 
 def cmd_validate_json(argv):
     if len(argv) < 2:
-        usage("Usage: python3 tools/validate-json.py <schema-contract> <data-file>")
+        usage("Usage: python3 tools/opsgate_tools.py validate-json <schema-contract> <data-file>")
     schema = read_json(argv[0])
     data = load_data(argv[1])
     failures = validate_value(data.get("request") or data, schema, schema)

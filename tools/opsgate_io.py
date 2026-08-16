@@ -107,11 +107,11 @@ def load_request(path):
 
 
 def capture_python(command, args):
-    return subprocess.check_output([sys.executable, str(ROOT_DIR / "tools" / f"{command}.py"), *args], cwd=ROOT_DIR, text=True)
+    return subprocess.check_output([sys.executable, str(ROOT_DIR / "tools" / "opsgate_tools.py"), command, *args], cwd=ROOT_DIR, text=True)
 
 
 def run_python(command, args, expect=None):
-    completed = subprocess.run([sys.executable, str(ROOT_DIR / "tools" / f"{command}.py"), *args], cwd=ROOT_DIR, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    completed = subprocess.run([sys.executable, str(ROOT_DIR / "tools" / "opsgate_tools.py"), command, *args], cwd=ROOT_DIR, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     if expect is not None and completed.returncode != expect:
         raise RuntimeError(completed.stderr or completed.stdout)
     if expect is None and completed.returncode != 0:

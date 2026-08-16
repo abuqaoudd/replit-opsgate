@@ -222,7 +222,7 @@ def cmd_test_all(argv):
     def try_run(name, command, args, expect_exit=0):
         try:
             completed = subprocess.run(
-                [sys.executable, str(ROOT_DIR / "tools" / f"{command}.py"), *args],
+                [sys.executable, str(ROOT_DIR / "tools" / "opsgate_tools.py"), command, *args],
                 cwd=ROOT_DIR, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
             )
             ok = completed.returncode == expect_exit

@@ -31,7 +31,7 @@ Apply: platform/safety → this file → routed `ai/**` → applicable `.agents/
 
 Normal application writes are limited to this project's own frontend and backend source roots, plus directly related tests inside those trees. Never assume a specific project's folder names - resolve the actual roots in this order:
 
-1. Look for this engine's `tools/` directory somewhere in this project (it is vendored in, commonly as a git submodule, and may be named `replit-opsgate`, `opsgate-engine`, or anything else the project chose - identify it by the presence of `tools/opsgate_contracts.py`, not by a fixed folder name). If found, run `python3 <that-directory>/tools/show-profile.py` (or read the active profile from that directory's `tools/opsgate_contracts.py`'s `PROFILES`) to get this project's `frontend_root` and `backend_root`. `OPSGATE_PROFILE` (env var, legacy name `METCO_PROFILE` also honored) or a `"profile"` field on a request selects the profile explicitly; without either, the default is `generic-replit`, whose roots are unset until a project-specific profile is added for this project.
+1. Look for this engine's `tools/` directory somewhere in this project (it is vendored in, commonly as a git submodule, and may be named `replit-opsgate`, `opsgate-engine`, or anything else the project chose - identify it by the presence of `tools/opsgate_contracts.py`, not by a fixed folder name). If found, run `python3 <that-directory>/tools/opsgate_tools.py show-profile` (or read the active profile from that directory's `tools/opsgate_contracts.py`'s `PROFILES`) to get this project's `frontend_root` and `backend_root`. `OPSGATE_PROFILE` (env var, legacy name `METCO_PROFILE` also honored) or a `"profile"` field on a request selects the profile explicitly; without either, the default is `generic-replit`, whose roots are unset until a project-specific profile is added for this project.
 2. If the resolved roots are unset, or no such engine directory is present at all, use only the exact paths the current task explicitly authorizes as write scope - never guess a folder name from convention or from another project.
 
 Default deny everything else. Read supporting Python contracts or named contracts only when needed and never edit them without explicit authority for the exact target.
@@ -286,9 +286,9 @@ Use:
 
 - `<engine-dir>/tools/opsgate_contracts.py` to determine deliverable, mode, skill, references, bounded/phased execution, capability gates, protected paths, schemas, and distribution rules.
 - `<engine-dir>/tools/opsgate_fixtures.py` for validation fixtures and gold-standard examples.
-- `<engine-dir>/tools/route-request.py` when a structured request object or compatible request file is available.
-- `<engine-dir>/tools/compile-prompt.py` when a structured request should be converted into a Replit prompt.
-- `<engine-dir>/tools/intake-request.py` only as a cautious first pass for plain-language requests; do not invent high-risk paths or authorizations.
+- `python3 <engine-dir>/tools/opsgate_tools.py route-request` when a structured request object or compatible request file is available.
+- `python3 <engine-dir>/tools/opsgate_tools.py compile-prompt` when a structured request should be converted into a Replit prompt.
+- `python3 <engine-dir>/tools/opsgate_tools.py intake-request` only as a cautious first pass for plain-language requests; do not invent high-risk paths or authorizations.
 
 The engine files guide routing and prompt generation. They do not grant write authority, bypass protected paths, or replace explicit user scope.
 

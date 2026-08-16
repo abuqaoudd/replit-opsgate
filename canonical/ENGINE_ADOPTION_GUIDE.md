@@ -87,7 +87,7 @@ python3 tools/init-profile.py --profile acme --target-root /path/to/outer-projec
 
 `--target-root` is the *outer* project's own root - not this engine's directory. Run from inside the engine (as it would be when embedded as a submodule), this writes two files at the outer project's root and touches nothing inside the engine (it does not materialize `replit.md`/`ai/*.md` the way `apply-setup.py` does - only the profile config and a placeholder business file):
 
-1. `<target-root>/opsgate.profile.json` - a small JSON file holding the new profile's `frontend_root`/`backend_root`, `description`, `business_file` name, and any `--extra-never-access <glob>` (repeatable) on top of the universal baseline (`.git/**`, `.env`, `node_modules/**`, `.github/workflows/**`, `.claude/**`, `.agents/memory/**`). `tools/opsgate_tools.py`'s `read_json()` merges this on top of the built-in `metco`/`generic-replit` profiles at runtime, for every tool, automatically - `active_profile()`, `protected_paths_for()`, `show-profile.py`, `compile-prompt.py` all see it with no other change needed.
+1. `<target-root>/opsgate.profile.json` - a small JSON file holding the new profile's `frontend_root`/`backend_root`, `description`, `business_file` name, and any `--extra-never-access <glob>` (repeatable) on top of the universal baseline (`.git/**`, `.env`, `node_modules/**`, `.github/workflows/**`, `.claude/**`, `.agents/memory/**`). `tools/opsgate_profiles.py`'s `read_json()` merges this on top of the built-in `metco`/`generic-replit` profiles at runtime, for every tool, automatically - `active_profile()`, `protected_paths_for()`, `show-profile`, `compile-prompt` all see it with no other change needed.
 2. `<target-root>/ai/<profile>.md` - a starter business file structured like `ai/metco.md` (Responsibility, Activation, Inputs, a `## Business Facts` section left as fill-in placeholders, `Must Not`, `Start record`, `Workflow`, `Output Evidence`), written directly to where the Replit installation step already expects a project's `ai/**` files to live - no copy step needed for this file specifically.
 
 It never edits an existing profile (re-running with a profile key already in `opsgate.profile.json` refuses and tells you to edit that file by hand) and never overwrites an existing business file without `--force`.
@@ -100,7 +100,7 @@ After running it: fill in the generated business file's `## Business Facts` sect
 
 ### Doing it by hand instead
 
-If you'd rather not run the script: write `<target-root>/opsgate.profile.json` yourself (see `tools/opsgate_tools.py`'s `load_external_profile_config()` for the exact shape expected under its `"profiles"` key) and `<target-root>/ai/<profile>.md` following `ai/metco.md`'s structure.
+If you'd rather not run the script: write `<target-root>/opsgate.profile.json` yourself (see `tools/opsgate_profiles.py`'s `load_external_profile_config()` for the exact shape expected under its `"profiles"` key) and `<target-root>/ai/<profile>.md` following `ai/metco.md`'s structure.
 
 Everything else in the engine - routing, capability gates, the HITL protocol, the lexical scoring/tie detection, MCP tool wiring - is already project-agnostic and needs no change to adopt elsewhere.
 

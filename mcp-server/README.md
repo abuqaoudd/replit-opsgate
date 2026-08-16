@@ -5,9 +5,9 @@ HTTP-based MCP server, so a remote agent (e.g. Replit's Connect via MCP) can cal
 them directly instead of an agent inside this repo shelling out to the CLI.
 
 This is an adapter, not a reimplementation - every tool here calls the exact same
-`cmd_*` function the CLI scripts (`tools/check-paths.py`, `tools/preflight.py`, etc.)
-call, and returns exactly what that function would print. If `opsgate_tools.py`
-changes, this file does not need to.
+`cmd_*` function the CLI calls (`python3 tools/opsgate_tools.py check-paths`,
+`... preflight`, etc.), and returns exactly what that function would print. If
+`opsgate_tools.py` changes, this file does not need to.
 
 ## Where this lives
 
