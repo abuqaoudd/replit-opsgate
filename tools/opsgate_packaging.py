@@ -115,7 +115,6 @@ def cmd_build_distributions(argv):
         copy_recursive(ROOT_DIR / source, claude_root / target)
     for package_name in distributions["claude"]["skill_packages"]:
         make_zip(claude_root / f"{package_name}.zip", claude_root / package_name)
-    shutil.copy2(claude_root / "replit-task-builder.zip", claude_root / "skill.zip")
     dist_files = list_files(ROOT_DIR / "dist", lambda path: not str(path).endswith(".DS_Store"))
     manifest = {
         "generated_at": _dt.datetime.now(_dt.timezone.utc).isoformat().replace("+00:00", "Z"),

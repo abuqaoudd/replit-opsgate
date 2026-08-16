@@ -1,5 +1,11 @@
 # Changelog
 
+## 6.0.27 An Undocumented Duplicate Zip Nobody Could Explain - 2026-08-16
+
+- Removed `dist/claude/claude-skill/skill.zip`, a byte-identical copy of `replit-task-builder.zip` under a generic name that `cmd_build_distributions` (`tools/opsgate_packaging.py`) wrote on every build via `shutil.copy2(claude_root / "replit-task-builder.zip", claude_root / "skill.zip")`. Traced it back through git history and it predates every commit checked with zero comment, README mention, or changelog entry ever explaining its purpose - apparently a generic alias from whenever `replit-task-builder` was the engine's only Claude skill package, left behind after more packages were added and nothing ever pointed at it by that name.
+- Confirmed nothing references `skill.zip` anywhere in `tools/`, `canonical/`, or generated docs before removing the line; `dist/release_hashes.py` (itself fully generated) drops the stale entry automatically on rebuild.
+- Rebuilt `dist/claude`/`dist/replit`, confirmed `skill.zip` no longer exists in the build output. `validate-engine.py`: 0 warnings. `test-all.py`: 63/63.
+
 ## 6.0.26 Closing The Known-Backlog List Instead Of Just Naming It - 2026-08-16
 
 - Worked through the seven lower-priority items the 6.0.23 audit had identified but left unfixed:
