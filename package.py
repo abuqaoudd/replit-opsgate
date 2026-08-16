@@ -1,7 +1,7 @@
 # Engine package metadata stored as Python.
 
 PACKAGE = {'name': 'replit-opsgate-engine-foundation',
- 'version': '6.0.31',
+ 'version': '6.0.32',
  'private': True,
  'type': 'module',
  'scripts': {'build': 'python3 tools/opsgate_tools.py build-distributions',

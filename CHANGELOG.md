@@ -1,5 +1,11 @@
 # Changelog
 
+## 6.0.32 Dead Branch Left Behind By The Shim Deletion - 2026-08-16
+
+- User spotted this while reading `opsgate_tools.py` after the 6.0.30 shim deletion. `main()` still did `command = Path(sys.argv[0]).stem` and branched on whether that equaled `"opsgate_tools"`, falling back to treating `sys.argv[1:]` as args otherwise - logic that only made sense when 22 separate per-command files could invoke this module under their own filename. With those files gone, `sys.argv[0]`'s stem is now always `"opsgate_tools"` (it's the only file left that can invoke `main()`), so the `else` branch was permanently dead code I should have removed in 6.0.30 itself and didn't.
+- Simplified `main()` to read the command straight from `sys.argv[1]`, dropping the now-pointless stem check entirely. The `COMMANDS` dispatch table itself was never dead - it's the live dispatcher every command still runs through - only the vestigial branching around it was.
+- Verified: `python3 tools/opsgate_tools.py` (no args) still prints the correct usage/command-list message and exits 2; `python3 tools/opsgate_tools.py show-profile` still runs. `validate-engine.py`: 0 warnings. `test-all.py`: 63/63.
+
 ## 6.0.31 Removed ENGINE_MIGRATION_NOTES.md - 2026-08-16
 
 - User request. After the 6.0.26/6.0.29 trims, the file was down to a goal statement, a pointer to `README.md` for architecture, a short list of still-active markdown conventions, and an open TODO list - all either duplicated elsewhere or thin enough not to justify a dedicated file. Deleted outright rather than trimmed further. Confirmed by grep it's referenced nowhere live - only in `CHANGELOG.md`'s own history, left untouched as the historical record. Not part of the `canonical/` → `dist/` build pipeline, so no rebuild needed.

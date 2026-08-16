@@ -1,6 +1,6 @@
 # Generated engine release hashes
 
-RELEASE_HASHES = {'generated_at': '2026-08-16T13:24:54.836409Z',
+RELEASE_HASHES = {'generated_at': '2026-08-16T13:28:28.136061Z',
  'files': [{'path': 'dist/claude/CLAUDE_PROJECT_INSTRUCTIONS.md',
             'sha256': '2d284c91ef7a268bcfe6dc5b9f1671fb0de0db4fb67bac7d8ba8f0cda76bf7a7'},
            {'path': 'dist/claude/claude-skill/engine-maintainer.zip',
@@ -222,7 +222,7 @@ RELEASE_HASHES = {'generated_at': '2026-08-16T13:24:54.836409Z',
            {'path': 'dist/claude/templates/TASK_BACKLOG_PROMPT_TEMPLATE.md',
             'sha256': '538ae6fb01a76604d0f0536c39ca58bffd5063dfd3da388284e655529b3f796d'},
            {'path': 'dist/release_hashes.py',
-            'sha256': '5386d44fd7bfd5cb0686f0e2595c92e73732723ca991fd3320b5332056f4ebf7'},
+            'sha256': '20fd84eabf4ddd6dff7b69030bfbbfdd7f65825d373ae3aef34ef4bf9def8b11'},
            {'path': 'dist/replit-install/.agents/skills/api-server-development/SKILL.md',
             'sha256': 'f9d5f286f341a7c3ce0c0f47e9a355b90622251735ab6fcce861863629b80d51'},
            {'path': 'dist/replit-install/.agents/skills/auth-permission-workflow/SKILL.md',

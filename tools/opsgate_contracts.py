@@ -1,7 +1,7 @@
 # Generated engine contracts (Replit OpsGate). Edit this file instead of standalone JSON manifests.
 
 ENGINE_MANIFEST = {'name': 'replit-opsgate',
- 'version': '6.0.31',
+ 'version': '6.0.32',
  'release_date': '2026-08-16',
  'source_version': '6',
  'purpose': 'Canonical prompt, skill, and Replit engine foundation with object-oriented instruction '

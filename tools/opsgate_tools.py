@@ -523,14 +523,10 @@ COMMANDS = {
 
 
 def main():
-    command = Path(sys.argv[0]).stem
-    if command == "opsgate_tools":
-        if len(sys.argv) < 2:
-            usage(f"Usage: python3 tools/opsgate_tools.py <{'|'.join(sorted(COMMANDS))}> [args...]")
-        command = sys.argv[1]
-        args = sys.argv[2:]
-    else:
-        args = sys.argv[1:]
+    if len(sys.argv) < 2:
+        usage(f"Usage: python3 tools/opsgate_tools.py <{'|'.join(sorted(COMMANDS))}> [args...]")
+    command = sys.argv[1]
+    args = sys.argv[2:]
     if command not in COMMANDS:
         usage(f"Unknown command: {command}")
     COMMANDS[command](args)
