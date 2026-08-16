@@ -63,4 +63,4 @@ For phased implementation or change work, require `references/phased-implementat
 
 ## HITL continuation
 
-When HITL activates, return only its decision request and stop the entire task. On a later `DECIDE` reply, validate the ID, answer, scope, and permanent boundaries. Keep the task paused and ask one narrowed follow-up if the reply is incomplete, ambiguous, or mismatched. Otherwise require the minimal scoped drift check from `replit.md` and resume the exact blocked step without restarting completed work.
+Trigger only for the three cases `replit.md`'s "Human-in-the-loop decision pause" section defines - this skill does not redefine them. When HITL activates, return only its decision request and stop the entire task. On a later `DECIDE` reply, validate the ID, answer, scope, and permanent boundaries. Keep the task paused and ask one narrowed follow-up if the reply is incomplete, ambiguous, or mismatched. Otherwise require the minimal scoped drift check from `replit.md` and resume the exact blocked step without restarting completed work.

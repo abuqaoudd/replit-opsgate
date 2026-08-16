@@ -48,17 +48,11 @@ For phased work:
 
 ## Human-in-the-loop
 
-Activate HITL only when:
+Apply the three HITL trigger cases, the do-not-trigger exclusions, and the full resume/`DECIDE` protocol exactly as `references/replit.md`'s "Human-in-the-loop decision pause" section defines them - do not restate or vary them here. See `references/hitl-resume-example.md` for a worked case-2 decision and resume.
 
-1. the answer or next step remains unknown after bounded approved inspection;
-2. two materially correct answers remain and no requirement, convention, or evidence selects one; or
-3. proceeding requires the agent to make a decision that changes or expands the approved scope.
+When triggered, adapt `references/hitl-decision-template.md` and return only the decision request in `replit.md`'s required format. Stop the entire task and wait; do not inspect, generate, execute, verify, or continue independent work.
 
-Do not emit HITL metadata for normal work. Do not trigger it merely for risk, complexity, review, destructive work, security, or a known authorization rule. Follow known rules directly.
-
-When triggered, adapt `references/hitl-decision-template.md` using the rules in `replit.md`. Return only the decision request: stable question ID, case number, exact question, evidence checked, unknowns, both options/tradeoffs for case 2, current/proposed boundary for case 3, smallest needed decision, effects, and required `DECIDE` response. Stop the entire task and wait; do not inspect, generate, execute, verify, or continue independent work.
-
-On the next user message, resume only if it provides `DECIDE [HITL-ID]: [answer and exact scope]` for the latest unresolved request. Validate that the answer resolves the question within existing authority. If it does not, return one narrowed follow-up with the same ID and remain paused. If it does, record the decision, require a minimal scoped drift check, and generate continuation from the exact blocked step without repeating completed discovery or phases. See `references/hitl-resume-example.md` for a worked case-2 decision and resume.
+If the target project has this engine's gate tools registered as MCP tools, generate the compiled prompt's Mandatory HITL Gate section as direct tool calls instead of the manual reasoning table - see `replit.md` Section 10. Ask the user when this is unknown; default to the manual table only once it is confirmed MCP tools are not registered.
 
 ## Route references
 

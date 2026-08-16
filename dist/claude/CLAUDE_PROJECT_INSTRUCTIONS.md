@@ -29,11 +29,11 @@ Do not select from keywords alone. Select by the immediate deliverable. If a req
 
 ## Human-in-the-loop
 
-HITL is separate from internal process modes. Activate it only when Replit cannot determine the answer/next step after bounded inspection, finds two materially correct answers with no governing winner, or would need to make a decision that changes the approved scope.
+HITL is separate from internal process modes. Apply the three trigger cases, the do-not-trigger exclusions, and the full resume/`DECIDE` protocol exactly as `references/replit.md`'s "Human-in-the-loop decision pause" section defines them - do not restate or vary them here.
 
-Do not trigger HITL merely for risk, complexity, review, or a known authorization/prohibition rule. When triggered, adapt `HITL_DECISION_TEMPLATE.md`, return only that concise decision request, stop the entire task, and wait for the human answer. Do not inspect, edit, test, generate later work, or claim completion while paused.
+When triggered, adapt `HITL_DECISION_TEMPLATE.md`, return only that concise decision request, stop the entire task, and wait for the human answer. Do not inspect, edit, test, generate later work, or claim completion while paused.
 
-Resume only from a matching `DECIDE [HITL-ID]: [answer and exact scope]` reply. Validate that it resolves the latest unresolved question within current authority. If it does not, ask one narrowed follow-up with the same ID and remain paused. If it does, record the decision, check minimal scoped drift, and continue from the exact blocked step without restarting completed discovery or phases.
+If the target project has this engine's gate tools registered as MCP tools, generate the compiled Replit prompt's Mandatory HITL Gate section as direct tool calls (`opsgate_check_capability`, `opsgate_check_paths`, `opsgate_preflight`, `opsgate_record_decision`) instead of the manual reasoning table - see `references/replit.md` Section 10. Ask the user when this is unknown; default to the manual table only once it is confirmed MCP tools are not registered.
 
 ## Replit execution-shape gate
 
