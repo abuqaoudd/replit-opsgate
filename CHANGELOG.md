@@ -1,5 +1,9 @@
 # Changelog
 
+## 6.0.31 Removed ENGINE_MIGRATION_NOTES.md - 2026-08-16
+
+- User request. After the 6.0.26/6.0.29 trims, the file was down to a goal statement, a pointer to `README.md` for architecture, a short list of still-active markdown conventions, and an open TODO list - all either duplicated elsewhere or thin enough not to justify a dedicated file. Deleted outright rather than trimmed further. Confirmed by grep it's referenced nowhere live - only in `CHANGELOG.md`'s own history, left untouched as the historical record. Not part of the `canonical/` → `dist/` build pipeline, so no rebuild needed.
+
 ## 6.0.30 One Dispatcher Instead Of Twenty-Two Identical Four-Line Files - 2026-08-16
 
 - User-requested repo-structure cleanup. `tools/` was 36 flat files mixing two unrelated things with no separation: 22 byte-identical 4-line CLI shims (`from opsgate_tools import main; main()`, each one dispatching purely on its own filename via `Path(sys.argv[0]).stem`) and 12 real implementation modules. Confirmed a single-entrypoint dispatcher already worked without any code change (`python3 tools/opsgate_tools.py <command> [args...]` was already a supported fallback path in `main()`), so removing the shims was pure duplication removal, not new plumbing.
