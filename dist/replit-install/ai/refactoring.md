@@ -60,5 +60,3 @@ Delete only after checking imports, exports, routes/lazy imports, registries, st
 ## Output Evidence
 
 For broad work include baseline, classifications, reuse map, completed batches, file operations, creation evidence, behavior comparison, exact checks, same-method before/after metrics, remaining safe batches, and scope compliance. Stop a batch for unsupported contracts, uncertain deletion/business rules, or protected/locked requirements; continue independent safe batches.
-
-For broad work include baseline, classifications, reuse map, completed batches, file operations, creation evidence, behavior comparison, exact checks, same-method before/after metrics, remaining safe batches, and scope compliance. Stop a batch for unsupported contracts, uncertain deletion/business rules, or protected/locked requirements; continue independent safe batches.

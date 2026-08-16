@@ -4,7 +4,7 @@ Specification version: 6
 
 ## 1. Purpose
 
-The engine foundation makes the kit programmable without replacing the agent-facing Markdown. Markdown remains the instruction and artifact layer. Python contracts define the machine-readable contract used by routing, validation, building, and future prompt compilation.
+The engine foundation makes this engine programmable without replacing the agent-facing Markdown. Markdown remains the instruction and artifact layer. Python contracts define the machine-readable contract used by routing, validation, building, and future prompt compilation.
 
 ## 2. Source model
 
@@ -17,13 +17,12 @@ The engine foundation makes the kit programmable without replacing the agent-fac
 
 | Contract | File |
 |---|---|
-| Kit release metadata | `tools/opsgate_contracts.py` |
+| Engine release metadata | `tools/opsgate_contracts.py` |
 | Routing and skill selection | `tools/opsgate_contracts.py` |
 | Capability gates | `tools/opsgate_contracts.py` |
 | Protected and locked paths | `tools/opsgate_contracts.py` |
 | Request intake | `tools/opsgate_contracts.py` |
 | HITL decision shape | `tools/opsgate_contracts.py` |
-| Template metadata | `tools/opsgate_contracts.py` |
 | Run, phase, and handoff state | `tools/opsgate_contracts.py` |
 | Parsed final report | `tools/opsgate_contracts.py` |
 | Distribution build map | `tools/opsgate_contracts.py` |
@@ -33,12 +32,12 @@ The engine foundation makes the kit programmable without replacing the agent-fac
 ## 4. Required tools
 
 - `build-distributions.py` generates Claude and Replit outputs.
-- `validate-kit.py` checks Python contracts, skill metadata, protected rules, generated drift, archives, fixtures, compiler output, run state, and report parsing.
+- `validate-engine.py` checks Python contracts, skill metadata, protected rules, generated drift, archives, fixtures, compiler output, run state, and report parsing.
 - `route-request.py` returns the selected artifact, mode, skill, references, execution shape, and missing authority.
 - `compile-prompt.py` creates a first operational prompt from request data and routing output.
 - `init-state.py` creates structured run state.
 - `parse-report.py` extracts structured evidence from a final report.
-- `diff-upgrade.py` compares kit roots during upgrades.
+- `diff-upgrade.py` compares engine roots during upgrades.
 
 ## 5. Markdown cleanup rule
 

@@ -4,7 +4,7 @@ Specification version: 6
 
 ## 1. Purpose
 
-The kit converts a user’s desired outcome and allowed scope into governed project artifacts or executable Replit instructions. Users describe what they need; routing logic and skills determine how to perform it.
+The engine converts a user’s desired outcome and allowed scope into governed project artifacts or executable Replit instructions. Users describe what they need; routing logic and skills determine how to perform it.
 
 ## 2. Core requirements
 
@@ -30,7 +30,7 @@ The kit converts a user’s desired outcome and allowed scope into governed proj
 | `ai/**` instruction objects | Supply triggered domain responsibilities, inputs, boundaries, workflows, and output evidence | Grant broader authority |
 | Replit scenario skills | Execute the selected workflow | Self-authorize protected or exceptional work |
 | Templates | Provide output structure and minimum evidence | Expose internal router labels as user inputs |
-| Specifications | Define normative kit behavior and traceability | Override runtime authority |
+| Specifications | Define normative engine behavior and traceability | Override runtime authority |
 
 ## 4. Input contract
 

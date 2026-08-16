@@ -1,8 +1,8 @@
-# Kit Specification Index
+# Engine Specification Index
 
 Specification version: 6
 
-This directory defines the normative behavior of the Claude Project Prompt Kit. Root instructions remain the runtime authority; these files define the design contract used to build, audit, and evolve them.
+This directory defines the normative behavior of the Claude Project Prompt Engine. Root instructions remain the runtime authority; these files define the design contract used to build, audit, and evolve them.
 
 ## Specification map
 
@@ -47,7 +47,7 @@ If a lower source conflicts with a higher source, the higher source wins. A skil
 
 ## Change discipline
 
-Any material kit change MUST:
+Any material engine change MUST:
 
 1. update the affected normative specification;
 2. update canonical runtime files and templates;

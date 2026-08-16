@@ -1,11 +1,11 @@
 # Engine package metadata stored as Python.
 
 PACKAGE = {'name': 'replit-opsgate-engine-foundation',
- 'version': '6.0.22',
+ 'version': '6.0.26',
  'private': True,
  'type': 'module',
  'scripts': {'build': 'python3 tools/build-distributions.py',
-             'validate': 'python3 tools/validate-kit.py',
+             'validate': 'python3 tools/validate-engine.py',
              'compile:frontend': 'python3 tools/compile-prompt.py routing:frontend-task',
              'state:migration': 'python3 tools/init-state.py routing:migration-task-missing-auth',
              'parse:report': 'python3 tools/parse-report.py fixtures/reports/sample-replit-final-report.md',

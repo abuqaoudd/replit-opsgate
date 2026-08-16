@@ -1,6 +1,6 @@
-# Replit OpsGate Claude Project Prompt Kit
+# Replit OpsGate Claude Project Prompt Engine
 
-This kit turns project requests into detailed business files, implementation specifications, audits, task backlogs, controlled change records, and governed Replit Agent prompts. Version 6 preserves automatic internal process-mode routing and the strict three-case HITL pause/resume flow, and adds first-class module business-file audit updates plus delta spec generation from business MD versus existing spec files.
+This engine turns project requests into detailed business files, implementation specifications, audits, task backlogs, controlled change records, and governed Replit Agent prompts. Version 6 preserves automatic internal process-mode routing and the strict three-case HITL pause/resume flow, and adds first-class module business-file audit updates plus delta spec generation from business MD versus existing spec files.
 
 ## Contents
 
@@ -53,9 +53,9 @@ For an upgrade from version 5.5 to 6, replace `replit.md`, all `ai/**` files, an
 - Detailed specification files define requirement records, interface contracts, traceability, state coverage, verification, and distribution parity.
 - `PASSED`, `FAILED`, and `NOT RUN` keep verification honest.
 
-## Adopting this kit in a different Replit project
+## Adopting this engine in a different Replit project
 
-This kit is meant to be dropped into other projects as a submodule (or a vendored copy) - which means its own git history ships to every project that reuses it. A profile that describes one specific project's own write roots and protected paths is fine as generic infrastructure, but that project's actual business facts (roles, permissions, ID formats, billing rules - whatever `ai/metco.md` holds for METCO) are that project's own data, not this engine's. Baking a project's profile and business file into `opsgate_contracts.py`/`canonical/references/ai/` the way the original `metco` profile still does means every other adopting project's submodule checkout carries METCO's business facts around for no reason.
+This engine is meant to be dropped into other projects as a submodule (or a vendored copy) - which means its own git history ships to every project that reuses it. A profile that describes one specific project's own write roots and protected paths is fine as generic infrastructure, but that project's actual business facts (roles, permissions, ID formats, billing rules - whatever `ai/metco.md` holds for METCO) are that project's own data, not this engine's. Baking a project's profile and business file into `opsgate_contracts.py`/`canonical/references/ai/` the way the original `metco` profile still does means every other adopting project's submodule checkout carries METCO's business facts around for no reason.
 
 So a new profile's config and business file are written entirely **outside this engine's own repo**, in the consuming project's own root - the same place `replit.md` and `ai/**` already end up after the "Replit installation" copy step above. Nothing about adopting a new project ever needs to touch a file inside this engine.
 
@@ -102,7 +102,7 @@ After running it: fill in the generated business file's `## Business Facts` sect
 
 If you'd rather not run the script: write `<target-root>/opsgate.profile.json` yourself (see `tools/opsgate_tools.py`'s `load_external_profile_config()` for the exact shape expected under its `"profiles"` key) and `<target-root>/ai/<profile>.md` following `ai/metco.md`'s structure.
 
-Everything else in the kit - routing, capability gates, the HITL protocol, the lexical scoring/tie detection, MCP tool wiring - is already project-agnostic and needs no change to adopt elsewhere.
+Everything else in the engine - routing, capability gates, the HITL protocol, the lexical scoring/tie detection, MCP tool wiring - is already project-agnostic and needs no change to adopt elsewhere.
 
 ### Known migration debt: `metco` itself is still a built-in, not an external profile
 
@@ -118,8 +118,10 @@ Files under `ai/` (`backend.md`, `database.md`, `maintenance.md`, and the rest, 
 
 Running this file only starts the server on whatever machine runs it (e.g. a developer's own laptop) - it is not reachable by a remote agent like Replit's cloud Agent until it's exposed through a tunnel (ngrok, Cloudflare Tunnel, Tailscale Funnel, etc.) and that tunnel's public HTTPS URL is registered in Replit's "Connect via MCP" settings. Setting up that tunnel is a separate step from running the server itself.
 
+Once exposed, the server is on the open internet, so every request must carry an `X-Opsgate-Token: <token>` header - a custom header rather than the standard `Authorization` header because free quick-tunnel providers reject requests carrying `Authorization` at the edge. Set a stable token with `--token` or `OPSGATE_MCP_TOKEN` (or `mcp-server/.env`, gitignored) before exposing the server; see `mcp-server/README.md` for the full auth details.
+
 Deliberately not wired into `build-distributions.py`/`DISTRIBUTIONS` - `mcp-server/` ships only with a full checkout or submodule of this engine, not inside the trimmed `dist/replit-install`/`dist/claude` packages. A project using only the copy-only install has no `tools/` for it to import from anyway.
 
 ## Maintenance
 
-Edit canonical files under `references/`, `templates/`, and `specifications/`, rebuild generated distributions, validate all skill folders, and keep packaged/source copies identical.
+Edit canonical files under `references/`, `templates/`, and `specifications/`, rebuild generated distributions, validate all skill folders, and keep packaged/source copies identical. See root `README.md`'s "Distribution model" section for the full `canonical/` → `dist/` architecture and the commands that enforce it.

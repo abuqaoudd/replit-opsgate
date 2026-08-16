@@ -39,10 +39,13 @@ transport) so a remote client (e.g. Replit's Connect via MCP) can reach it
 once it is exposed through a tunnel - this file only starts the local server;
 it does not expose it to the internet by itself.
 
-Every request must carry `Authorization: Bearer <token>` - there is no
+Every request must carry an `X-Opsgate-Token: <token>` header - there is no
 unauthenticated path, since this server has real side effects
 (`opsgate_init_run` writes to disk) and is meant to end up reachable through a
-public tunnel. Set `--token`/`OPSGATE_MCP_TOKEN` to a fixed value so it
+public tunnel. A custom header, not `Authorization`, because Cloudflare's free
+account-less quick tunnels (trycloudflare.com) reject any request carrying an
+Authorization header at the edge - confirmed empirically, see the comment
+above TokenAuthMiddleware below. Set `--token`/`OPSGATE_MCP_TOKEN` to a fixed value so it
 survives restarts; if neither is set, a random token is generated and printed
 once to stderr at startup. See `mcp-server/README.md` for details.
 """
@@ -165,7 +168,7 @@ def _parse_json_or_wrap(raw):
 # ---------------------------------------------------------------------------
 # Tools - one per runtime cmd_* function in opsgate_tools.py. Maintenance-only
 # commands (build-distributions, build-replit-install, audit-engine,
-# diff-upgrade, release-notes, validate-json, validate-kit, test-all) are
+# diff-upgrade, release-notes, validate-json, validate-engine, test-all) are
 # deliberately not exposed here - those are engine-authoring operations run
 # by hand inside this repo, not gate/routing calls a live Replit task needs.
 # ---------------------------------------------------------------------------
@@ -228,7 +231,7 @@ def opsgate_preflight(request: dict) -> dict:
         "Pass an empty object, or a request with a \"profile\" field to check a specific one."
     ),
 )
-def opsgate_show_profile(request: dict = None) -> dict:
+def opsgate_show_profile(request: dict | None = None) -> dict:
     return _run_json_in_json_out(opsgate_tools.cmd_show_profile, request or {})
 
 
@@ -358,14 +361,27 @@ def opsgate_record_decision(hitl_id: str, answer: str) -> dict:
 # opsgate_record_decision appends to a log) and is meant to be reached through
 # a public tunnel once registered with Replit's "Connect via MCP" - so it must
 # never serve requests with no credential check, regardless of --host. A
-# bearer token is required on every request; if one isn't supplied via
+# shared token is required on every request; if one isn't supplied via
 # --token/OPSGATE_MCP_TOKEN, a random one is generated and printed once at
 # startup so a first run still works without extra setup, it just cannot be
 # guessed or skipped.
+#
+# Deliberately a custom header (X-Opsgate-Token), not "Authorization: Bearer
+# <token>": Cloudflare's free, account-less "quick tunnels" (trycloudflare.com,
+# used by `cloudflared tunnel --url ...` with no login) reject any request
+# carrying an Authorization header at the edge - confirmed empirically (a
+# request with only that header back gets HTTP 421 "Invalid Host header"
+# straight from Cloudflare, never reaching this process; the identical request
+# with a custom header name passes through untouched). Presumably an anti-abuse
+# measure against using shared throwaway domains to relay stolen credentials.
+# A custom header carries the same secret with the same protection and isn't
+# subject to that block.
 # ---------------------------------------------------------------------------
 
+AUTH_HEADER_NAME = b"x-opsgate-token"
 
-class BearerAuthMiddleware:
+
+class TokenAuthMiddleware:
     def __init__(self, app, token):
         self.app = app
         self.token = token
@@ -375,33 +391,67 @@ class BearerAuthMiddleware:
             await self.app(scope, receive, send)
             return
         headers = dict(scope.get("headers") or [])
-        supplied = headers.get(b"authorization", b"").decode("latin-1")
-        if not hmac.compare_digest(supplied, f"Bearer {self.token}"):
-            response = JSONResponse({"error": "unauthorized - missing or invalid Authorization: Bearer <token> header"}, status_code=401)
+        supplied = headers.get(AUTH_HEADER_NAME, b"").decode("latin-1")
+        if not hmac.compare_digest(supplied, self.token):
+            response = JSONResponse({"error": f"unauthorized - missing or invalid {AUTH_HEADER_NAME.decode()} header"}, status_code=401)
             await response(scope, receive, send)
             return
         await self.app(scope, receive, send)
 
 
+def _load_dotenv_if_present():
+    """Minimal .env loader (KEY=VALUE per line, '#' comments and blank lines skipped) - avoids
+    adding python-dotenv as a dependency for one file. Looks next to this script
+    (mcp-server/.env), not the process's cwd, so it's found regardless of where the server is
+    launched from. Never overrides a variable already set in the real environment, so
+    `OPSGATE_MCP_TOKEN=x python3 ...` on the command line still wins over the file."""
+    env_path = SERVER_DIR / ".env"
+    if not env_path.exists():
+        return
+    for line in env_path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
+
+
 def main():
+    _load_dotenv_if_present()
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--host", default=os.environ.get("OPSGATE_MCP_HOST", "127.0.0.1"))
     parser.add_argument("--port", type=int, default=int(os.environ.get("OPSGATE_MCP_PORT", "8765")))
-    parser.add_argument("--token", default=os.environ.get("OPSGATE_MCP_TOKEN"), help="Shared bearer token required on every request. Defaults to OPSGATE_MCP_TOKEN, or a freshly generated random token if neither is set.")
+    parser.add_argument("--token", default=os.environ.get("OPSGATE_MCP_TOKEN"), help=f"Shared token required on every request via the {AUTH_HEADER_NAME.decode()} header. Defaults to OPSGATE_MCP_TOKEN, or a freshly generated random token if neither is set.")
+    parser.add_argument(
+        "--allowed-host",
+        action="append",
+        default=None,
+        help=(
+            "Extra Host header value(s) to accept, on top of the mcp SDK's built-in "
+            "127.0.0.1/localhost/[::1] defaults - required when this server is reached through a "
+            "tunnel/reverse-proxy domain (e.g. a Cloudflare/Tailscale hostname), since the SDK's "
+            "DNS-rebinding protection otherwise rejects any other Host header with 421. Repeatable, "
+            "or set OPSGATE_MCP_ALLOWED_HOSTS as a comma-separated list."
+        ),
+    )
     args = parser.parse_args()
     token = args.token or secrets.token_urlsafe(32)
+    extra_hosts = list(args.allowed_host or []) + [h.strip() for h in os.environ.get("OPSGATE_MCP_ALLOWED_HOSTS", "").split(",") if h.strip()]
+    if extra_hosts and mcp.settings.transport_security:
+        mcp.settings.transport_security.allowed_hosts.extend(extra_hosts)
+        print(f"opsgate MCP server: accepting extra Host header(s): {', '.join(extra_hosts)}", file=sys.stderr)
     print(f"opsgate MCP server: engine tools loaded from {ENGINE_TOOLS_DIR}", file=sys.stderr)
     print(f"opsgate MCP server: resolving profile config from cwd {Path.cwd()}", file=sys.stderr)
     print(f"opsgate MCP server: listening on http://{args.host}:{args.port}/mcp", file=sys.stderr)
     if not args.token:
         print(
             "opsgate MCP server: no --token/OPSGATE_MCP_TOKEN set - generated one for this run.\n"
-            f"opsgate MCP server: required header on every request: Authorization: Bearer {token}\n"
+            f"opsgate MCP server: required header on every request: {AUTH_HEADER_NAME.decode()}: {token}\n"
             "opsgate MCP server: set OPSGATE_MCP_TOKEN to a fixed value to keep this stable across restarts "
             "(e.g. for Replit's Connect via MCP custom-header config).",
             file=sys.stderr,
         )
-    app = BearerAuthMiddleware(mcp.streamable_http_app(), token)
+    app = TokenAuthMiddleware(mcp.streamable_http_app(), token)
     uvicorn.run(app, host=args.host, port=args.port, log_level="info")
 
 

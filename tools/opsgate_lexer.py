@@ -1,6 +1,6 @@
 """Lightweight lexical analysis for this engine's routing and intake matching.
 
-Everywhere this kit previously matched a signal word against request text, it did so with a
+Everywhere this engine previously matched a signal word against request text, it did so with a
 plain substring check (`needle in haystack`). That has two concrete failure modes fixed here:
 
 1. False positives across word boundaries - "test" matches inside "fastest" and "latest",
@@ -12,7 +12,7 @@ plain substring check (`needle in haystack`). That has two concrete failure mode
 
 This module tokenizes text into words and applies a small suffix-stripping stemmer so matching
 is word-aware and form-tolerant without pulling in an NLP dependency. It keeps the same scoring
-weights the kit already used (phrase signals score higher than single-word signals) so existing
+weights the engine already used (phrase signals score higher than single-word signals) so existing
 routing fixtures keep their expected outcome - the fix is removing false matches and loosening
 word-form rigidity, not renumbering the scale.
 
@@ -80,7 +80,7 @@ def phrase_present(text_tokens, signal_tokens):
 
 
 def lexical_score(text, signals):
-    """Word-aware replacement for the kit's old substring-based score_signals.
+    """Word-aware replacement for the engine's old substring-based score_signals.
 
     Same weights as before (phrase signals score 3, single-word signals score 1) so existing
     routing fixtures keep their expected winner - what changes is *which* occurrences count:

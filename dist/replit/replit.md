@@ -31,7 +31,7 @@ Apply: platform/safety → this file → routed `ai/**` → applicable `.agents/
 
 Normal application writes are limited to this project's own frontend and backend source roots, plus directly related tests inside those trees. Never assume a specific project's folder names - resolve the actual roots in this order:
 
-1. Look for this engine's `tools/` directory somewhere in this project (it is vendored in, commonly as a git submodule, and may be named `metco-kit`, `replit-opsgate`, or anything else the project chose - identify it by the presence of `tools/opsgate_contracts.py`, not by a fixed folder name). If found, run `python3 <that-directory>/tools/show-profile.py` (or read the active profile from that directory's `tools/opsgate_contracts.py`'s `PROFILES`) to get this project's `frontend_root` and `backend_root`. `OPSGATE_PROFILE` (env var, legacy name `METCO_PROFILE` also honored) or a `"profile"` field on a request selects the profile explicitly; without either, the default is `generic-replit`, whose roots are unset until a project-specific profile is added for this project.
+1. Look for this engine's `tools/` directory somewhere in this project (it is vendored in, commonly as a git submodule, and may be named `replit-opsgate`, `opsgate-engine`, or anything else the project chose - identify it by the presence of `tools/opsgate_contracts.py`, not by a fixed folder name). If found, run `python3 <that-directory>/tools/show-profile.py` (or read the active profile from that directory's `tools/opsgate_contracts.py`'s `PROFILES`) to get this project's `frontend_root` and `backend_root`. `OPSGATE_PROFILE` (env var, legacy name `METCO_PROFILE` also honored) or a `"profile"` field on a request selects the profile explicitly; without either, the default is `generic-replit`, whose roots are unset until a project-specific profile is added for this project.
 2. If the resolved roots are unset, or no such engine directory is present at all, use only the exact paths the current task explicitly authorizes as write scope - never guess a folder name from convention or from another project.
 
 Default deny everything else. Read supporting Python contracts or named contracts only when needed and never edit them without explicit authority for the exact target.
@@ -156,6 +156,8 @@ The Per-Action Gate checks the same three cases as the Mandatory HITL Gate, at f
 
 ### Mandatory HITL Gate (per phase and final report)
 
+**If this project has this engine's gate tools registered as MCP tools, see Section 10 first and call them directly - that is the preferred way to run every row below, not a fallback for when the table gets tedious.** The table, and the manual Gate Blocked / HITL decision-required formats, remain the required behavior only when MCP tools are not registered or a tool call errors.
+
 Every row below is checked the same way, but two different kinds of failure resolve differently, and only one of them is actually a HITL case:
 
 - **Deterministic** rows have one correct answer and no judgment involved — a failure means an explicit authorization, evidence, or scope grant is missing. Name the gate, state exactly what is missing, and stop. This is a blocked task, not a decision request — there is nothing to choose between, so never use the `DECIDE` reply format for one of these.
@@ -278,7 +280,7 @@ Stop before accessing or changing protected content, unknown/production services
 
 ## 9. Engine files
 
-If this engine's directory (see Section 2 for how to locate it - it may be named `metco-kit`, `replit-opsgate`, or something else) contains `tools/opsgate_contracts.py` and `tools/**`, treat them as the local engine contract for routing, capability gates, protected paths, template metadata, run state, and report parsing. The rest of this section writes its path as `<engine-dir>/` - substitute the directory you actually found.
+If this engine's directory (see Section 2 for how to locate it - it may be named `replit-opsgate`, `opsgate-engine`, or something else) contains `tools/opsgate_contracts.py` and `tools/**`, treat them as the local engine contract for routing, capability gates, protected paths, run state, and report parsing. The rest of this section writes its path as `<engine-dir>/` - substitute the directory you actually found.
 
 Use:
 
@@ -301,3 +303,5 @@ Before running the Mandatory HITL Gate by hand, check whether this project has r
 - If a human answers a HITL question, call `opsgate_record_decision` (or the legacy `metco_record_decision`, if that is the registered name) with the HITL id and answer before resuming, so the decision is persisted outside the conversation.
 
 Only fall back to the manual reasoning table in section 3 if a tool call errors or the MCP connection is unreachable, and say so explicitly in the Final Report when that happens - it means the gate ran on inference instead of a computed result. MCP tool availability changes how a gate result is obtained, never what the gate requires or what counts as protected, locked, or authorized.
+
+The same substitution applies inside a selected skill's own workflow steps, not only at the Mandatory HITL Gate checkpoints. Where a skill's numbered steps say to state or verify exact paths, expected owner, or applicable capability gates by hand, call `opsgate_preflight`/`opsgate_check_paths`/`opsgate_show_profile` for that instead when they are registered - the answer is the same either way, a tool call is just the more reliable way to get it. Skills are not rewritten per mode to say this themselves; this paragraph is the one place it needs to be said.

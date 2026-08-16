@@ -182,8 +182,6 @@ def build_entry(
     backend_root=None,
     description=None,
     extra_never_access=None,
-    test_policy="risk_based_existing_scripts_only",
-    distribution="replit",
     business_file=None,
 ):
     entry = {
@@ -192,9 +190,6 @@ def build_entry(
         "business_file": business_file or f"ai/{profile}.md",
         "frontend_root": frontend_root,
         "backend_root": backend_root,
-        "protected_policy": profile,
-        "test_policy": test_policy,
-        "distribution": distribution,
     }
     if extra_never_access:
         entry["extra_never_access"] = list(extra_never_access)

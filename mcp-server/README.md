@@ -50,11 +50,18 @@ Funnel, etc.) and that tunnel's public HTTPS URL is registered in Replit's
 
 ## Authentication
 
-Every request must carry `Authorization: Bearer <token>`, checked by a small
-ASGI middleware in front of the MCP app - there is no unauthenticated path,
-regardless of `--host`. This matters because the server has real side effects
-(`opsgate_init_run` writes to disk, `opsgate_record_decision` appends to a log)
-and is designed to end up reachable through a public tunnel.
+Every request must carry an `X-Opsgate-Token: <token>` header, checked by a
+small ASGI middleware in front of the MCP app - there is no unauthenticated
+path, regardless of `--host`. This matters because the server has real side
+effects (`opsgate_init_run` writes to disk, `opsgate_record_decision` appends
+to a log) and is designed to end up reachable through a public tunnel.
+
+It's a custom header, not the standard `Authorization` header, because
+Cloudflare's free, account-less "quick tunnels" (`cloudflared tunnel --url
+...`, no login required) reject any request carrying an `Authorization`
+header at the edge with `421 Invalid Host header` - confirmed empirically,
+never even reaching this server. A custom header carries the same secret with
+the same protection and passes through untouched.
 
 Set a stable token with `--token` or `OPSGATE_MCP_TOKEN` (recommended, so it
 survives restarts and you can put the same value into Replit's "Connect via
@@ -63,7 +70,7 @@ token at startup and prints it once to stderr - fine for a quick local test,
 but it changes every restart, so a saved MCP client config would need updating
 each time.
 
-A request without a valid token gets `401 {"error": "unauthorized - missing or invalid Authorization: Bearer <token> header"}`.
+A request without a valid token gets `401 {"error": "unauthorized - missing or invalid x-opsgate-token header"}`.
 
 ## Which project's profile it answers for
 
@@ -104,7 +111,7 @@ already documents - `opsgate_` prefix. All 14 runtime tools:
 | `opsgate_record_decision` | `cmd_record_decision` | `hitl_id` + `answer` (strings) | JSON - **appends to `runs/decisions.pylog` on this server's machine** |
 
 Deliberately **not** exposed: `build-distributions`, `build-replit-install`,
-`audit-engine`, `diff-upgrade`, `release-notes`, `validate-json`, `validate-kit`,
+`audit-engine`, `diff-upgrade`, `release-notes`, `validate-json`, `validate-engine`,
 `test-all` - engine-authoring operations run by hand inside this repo, not
 gate/routing calls a live Replit task needs. `init-profile`/`apply-setup` (the
 onboarding tools) are also not exposed - those are meant to be run once, by the

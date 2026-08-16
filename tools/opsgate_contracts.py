@@ -1,25 +1,25 @@
 # Generated engine contracts (Replit OpsGate). Edit this file instead of standalone JSON manifests.
 
-KIT_MANIFEST = {'name': 'replit-opsgate',
- 'version': '6.0.22',
- 'release_date': '2026-08-11',
+ENGINE_MANIFEST = {'name': 'replit-opsgate',
+ 'version': '6.0.26',
+ 'release_date': '2026-08-16',
  'source_version': '6',
- 'purpose': 'Canonical prompt, skill, and Replit engine foundation kit with object-oriented instruction '
-            'contracts.',
+ 'purpose': 'Canonical prompt, skill, and Replit engine foundation with object-oriented instruction '
+            'contracts, plus a real MCP server (mcp-server/) exposing the same gates as live tool calls.',
  'canonical_root': 'canonical',
  'generated_roots': ['dist/claude', 'dist/replit'],
- 'commands': {'validate': 'python3 tools/validate-kit.py',
+ 'commands': {'validate': 'python3 tools/validate-engine.py',
               'test_all': 'python3 tools/test-all.py',
               'build': 'python3 tools/build-distributions.py',
               'route': 'python3 tools/route-request.py <request.json>',
               'compile': 'python3 tools/compile-prompt.py <request.json>',
               'init_state': 'python3 tools/init-state.py <request.json>',
               'parse_report': 'python3 tools/parse-report.py <report.md>',
-              'diff_upgrade': 'python3 tools/diff-upgrade.py <old-kit-root> [new-kit-root]',
+              'diff_upgrade': 'python3 tools/diff-upgrade.py <old-engine-root> [new-engine-root]',
               'intake': 'python3 tools/intake-request.py "<plain language request>"',
               'next_phase': 'python3 tools/next-phase-prompt.py <run-state.json> <parsed-report.json>',
               'replit_install': 'python3 tools/build-replit-install.py',
-              'release_notes': 'python3 tools/release-notes.py [old-kit-root]',
+              'release_notes': 'python3 tools/release-notes.py <old-engine-root>',
               'preflight': 'python3 tools/preflight.py <request.json>',
               'check_paths': 'python3 tools/check-paths.py <request.json>',
               'check_capabilities': 'python3 tools/check-capabilities.py <request.json>',
@@ -210,7 +210,7 @@ CAPABILITY_GATES = {'ordinary_application_change': {'default': 'allowed_when_sco
                                            'requires': ['exact_explicit_authorization',
                                                         'task_specific_safety_prerequisites']}}
 
-# Protections every profile gets regardless of which specific project the kit is running
+# Protections every profile gets regardless of which specific project the engine is running
 # against - these are universal engineering risks (VCS internals, secrets files, dependency
 # trees, CI, agent memory), not anything specific to the METCO project. A brand-new Replit
 # project that only sets OPSGATE_PROFILE=generic-replit still gets this baseline for free instead
@@ -241,7 +241,7 @@ PROTECTED_PATHS = {'profiles': {'metco': {'normal_write_paths': ['artifacts/metc
                         # metco-api/** and pipeline/** are this project's own protected trees -
                         # kept only on the metco profile, not the universal baseline, since they
                         # would be meaningless (and misleadingly specific) noise on any other
-                        # project that adopts this kit via the generic-replit profile.
+                        # project that adopts this engine via the generic-replit profile.
                         'never_access': [*_UNIVERSAL_NEVER_ACCESS, 'metco-api/**', 'pipeline/**', '**/metco-api/**', '**/pipeline/**'],
                         'locked_by_default': list(_UNIVERSAL_LOCKED_BY_DEFAULT)},
                     'generic-replit': {'normal_write_paths': [],
@@ -298,7 +298,7 @@ REQUEST_SCHEMA = {'$schema': 'https://json-schema.org/draft/2020-12/schema',
                 'mcp': {'type': 'object',
                        'description': 'When enabled, compile-prompt.py emits MCP tool-call instructions (opsgate_preflight/check_paths/check_capability/record_decision) for the HITL gate instead of a manual prose reasoning table, since the target project has those tools registered on /mcp.',
                        'properties': {'enabled': {'type': 'boolean'},
-                                      'tool_prefix': {'type': 'string', 'description': 'Defaults to "opsgate_" - override only if the target server registered the kit tools under a different prefix.'}}},
+                                      'tool_prefix': {'type': 'string', 'description': 'Defaults to "opsgate_" - override only if the target server registered the engine\'s tools under a different prefix.'}}},
                 'known_context': {'type': 'object',
                                   'description': 'When any of these are set, compile-prompt.py replaces the open-ended discovery steps with a targeted verification instruction against the named items instead of telling the agent to go find them.',
                                   'properties': {'owners': {'type': 'array', 'items': {'type': 'string'}},
@@ -308,7 +308,7 @@ REQUEST_SCHEMA = {'$schema': 'https://json-schema.org/draft/2020-12/schema',
                                     'enum': ['full', 'minimal'],
                                     'description': 'Defaults to "full" (unchanged behavior). "minimal" trims required_references down to only the ones whose topic keywords appear in the request text/scope, always keeping replit.md and the active profile\'s business_file (see PROFILES[profile]["business_file"]), if it has one.'},
                 'profile': {'type': 'string',
-                           'description': 'Which PROFILES entry (protected paths, write roots) governs this request. Defaults to the OPSGATE_PROFILE environment variable if set, then manifests/profiles.json default_profile ("generic-replit"), then "generic-replit" if neither resolves to a known profile. Set this (or OPSGATE_PROFILE) to "metco" when this request is for the one project the kit was originally built for.'}}}
+                           'description': 'Which PROFILES entry (protected paths, write roots) governs this request. Defaults to the OPSGATE_PROFILE environment variable if set, then manifests/profiles.json default_profile ("generic-replit"), then "generic-replit" if neither resolves to a known profile. Set this (or OPSGATE_PROFILE) to "metco" when this request is for the one project the engine was originally built for.'}}}
 
 DISTRIBUTIONS = {'claude': {'root': 'dist/claude',
              'copies': [['canonical/CLAUDE_PROJECT_INSTRUCTIONS.md', 'dist/claude/CLAUDE_PROJECT_INSTRUCTIONS.md'],
@@ -316,9 +316,9 @@ DISTRIBUTIONS = {'claude': {'root': 'dist/claude',
                         ['canonical/references', 'dist/claude/references'],
                         ['canonical/specifications', 'dist/claude/specifications'],
                         ['canonical/examples', 'dist/claude/examples']],
-             'skill_packages': ['project-prompt-router', 'replit-task-builder', 'kit-maintainer', 'mcp-integration'],
+             'skill_packages': ['project-prompt-router', 'replit-task-builder', 'engine-maintainer', 'mcp-integration'],
              # Sources copied into dist/claude/claude-skill/<target>. Shared by build-distributions.py
-             # (which writes these) and validate-kit.py (which checks canonical/dist byte-identity),
+             # (which writes these) and validate-engine.py (which checks canonical/dist byte-identity),
              # so this is the single source of truth for the skill-package reference copy map.
              'skill_reference_mappings': [
                  ['canonical/templates/REPLIT_PHASED_IMPLEMENTATION_TEMPLATE.md', 'replit-task-builder/references/phased-implementation-template.md'],
@@ -335,6 +335,8 @@ DISTRIBUTIONS = {'claude': {'root': 'dist/claude',
                  ['canonical/specifications/HITL_SPEC.md', 'replit-task-builder/references/hitl-spec.md'],
                  ['canonical/references/ai', 'replit-task-builder/references/ai'],
                  ['canonical/references/replit-skills', 'replit-task-builder/references/replit-skills'],
+                 ['canonical/examples/gold-standard/hitl-resume-example.md', 'replit-task-builder/references/hitl-resume-example.md'],
+                 ['canonical/examples/gold-standard/parseable-final-report-example.md', 'replit-task-builder/references/parseable-final-report-example.md'],
                  ['canonical/templates/REPLIT_PHASED_IMPLEMENTATION_TEMPLATE.md', 'project-prompt-router/references/phased-implementation-template.md'],
                  ['canonical/references/replit.md', 'project-prompt-router/references/replit.md'],
                  ['canonical/templates/PROMPT_REQUEST_FORM.md', 'project-prompt-router/references/request-form.md'],
@@ -364,17 +366,11 @@ PROFILES = {'default_profile': 'generic-replit',
  'profiles': {'metco': {'description': 'METCO Replit frontend and Replit-backend project profile. Select explicitly (OPSGATE_PROFILE=metco or request.profile) - it is no longer the default.',
                         'business_file': 'ai/metco.md',
                         'frontend_root': 'artifacts/metco/src',
-                        'backend_root': 'artifacts/api-server/src',
-                        'protected_policy': 'metco',
-                        'test_policy': 'risk_based_existing_scripts_only',
-                        'distribution': 'replit'},
-              'generic-replit': {'description': "Default profile for any Replit project this kit is dropped into. frontend_root/backend_root are left unset (None) rather than guessed, since assuming a wrong folder name silently is worse than admitting it is not yet configured - set them by adding a project-specific profile (see canonical/README-v6.md) once the project's real roots are known.",
+                        'backend_root': 'artifacts/api-server/src'},
+              'generic-replit': {'description': "Default profile for any Replit project this engine is dropped into. frontend_root/backend_root are left unset (None) rather than guessed, since assuming a wrong folder name silently is worse than admitting it is not yet configured - set them by adding a project-specific profile (see canonical/README-v6.md) once the project's real roots are known.",
                                  'business_file': None,
                                  'frontend_root': None,
-                                 'backend_root': None,
-                                 'protected_policy': 'project_defined',
-                                 'test_policy': 'risk_based_existing_scripts_only',
-                                 'distribution': 'replit'}}}
+                                 'backend_root': None}}}
 
 RUN_STATE_SCHEMA = {'$schema': 'https://json-schema.org/draft/2020-12/schema',
  'title': 'Run State',
@@ -474,7 +470,7 @@ GATES = {'version': '6',
 
 CONTRACTS = {
 
-    'manifests/kit.manifest.json': KIT_MANIFEST,
+    'manifests/engine.manifest.json': ENGINE_MANIFEST,
 
     'manifests/routing.manifest.json': ROUTING_MANIFEST,
 

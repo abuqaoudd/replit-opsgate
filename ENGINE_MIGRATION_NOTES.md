@@ -2,29 +2,11 @@
 
 ## Goal
 
-Move the underlying prompt kit from a document-only format toward a Replit-ready orchestration engine, reusable across any Replit project (METCO was the first adopting project).
+Move the underlying prompt-based instructions from a document-only format toward a Replit-ready orchestration engine, reusable across any Replit project (METCO was the first adopting project).
 
-## Principle
+## Architecture
 
-Do not add more repeated Markdown when a rule can become structured data.
-
-Use:
-
-- Python contracts for rules software must inspect;
-- Markdown for human and agent guidance;
-- validators for release confidence;
-- generated distributions for ChatGPT and Replit packaging.
-
-## Source of truth
-
-Canonical files live under `canonical/`.
-
-Generated outputs live under `dist/` and should be rebuilt with `python3 tools/build-distributions.py`.
-
-## Current engine contracts
-
-- `tools/opsgate_contracts.py`: deliverable routing, mode/skill/reference mapping, phased-routing rules, capability gates, protected paths, request/report/HITL schemas, distribution mappings, profiles, template metadata, run state, and hard gate registry.
-- `tools/opsgate_fixtures.py`: routing, HITL, state, parsed-report, and gold-standard fixture data used by validation.
+See root [README.md](README.md)'s "Distribution model" and "Engine direction" sections for the canonical-source/generated-output split, the Python-contracts-vs-Markdown principle, and what `tools/opsgate_contracts.py`/`tools/opsgate_fixtures.py` hold - that is the one place this is explained, not restated here.
 
 ## Markdown cleanup strategy
 
@@ -36,22 +18,7 @@ Keep existing Markdown content, but improve it gradually:
 4. Keep specifications normative, not repetitive.
 5. Reference Python-backed rules instead of restating them in every file.
 
-## Added after foundation pass
-
-- `compile-prompt.py` creates a first ready-to-use prompt from a structured request and routing result.
-- `init-state.py` creates a parseable run state for bounded or phased work.
-- `parse-report.py` extracts files, checks, HITL mentions, blockers, and residual risk from a Replit final report.
-- `diff-upgrade.py` compares old and new kit roots and highlights changed files.
-- `intake-request.py` turns a plain-language request into a first structured request object.
-- `next-phase-prompt.py` combines run state and parsed report evidence to generate the next phase prompt.
-- `build-replit-install.py` creates a clean Replit-only install folder.
-- `release-notes.py` generates release notes from upgrade diff output.
-- `preflight.py`, `check-paths.py`, and `check-capabilities.py` enforce hard gates before work.
-- `lint-prompt.py` and `lint-report.py` reject prompts/reports missing gate evidence.
-- `init-run.py` creates a traceable run folder.
-- `record-decision.py` appends human decisions to `runs/decisions.pylog`.
-- `audit-engine.py` checks root Replit install files against generated kit output.
-- `canonical/examples/gold-standard/` captures good request, HITL, and report examples.
+The tools added after the initial foundation pass are recorded in `CHANGELOG.md`'s `6.0.0 Engine Foundation` entry, not repeated here - that changelog entry is the historical record; this document only tracks still-open migration work.
 
 ## Suggested v6 work
 

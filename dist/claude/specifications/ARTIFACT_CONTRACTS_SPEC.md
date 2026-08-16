@@ -2,6 +2,8 @@
 
 Specification version: 6
 
+`compile_artifact_prompt()` and `compile_replit_prompt()` in `tools/opsgate_prompts.py` emit a condensed, deliverable-specific "Required Output" checklist derived from this spec for the routed skill to build the actual artifact from - not a verbatim restatement of every required section below, since a generation prompt is bounded in length while the artifact it produces is not. A shorter or differently-ordered checklist is expected and is not by itself spec drift. The stable-ID prefixes this spec assigns per deliverable (`BUS-RULE-*`, `BUS-CAP-*`, `REQ-*`, `NFR-*`, `FIND-*`, `TASK-*`, `CHG-*`) are the one part that MUST still appear verbatim in the compiled checklist wherever this spec requires stable IDs for that deliverable - they are not optional generation detail.
+
 ## 1. Shared contract
 
 Every artifact MUST:

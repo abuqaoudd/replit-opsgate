@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Scaffold a new profile for adopting this engine on a fresh Replit project - written
 entirely OUTSIDE this engine's own repo, in the consuming project's own root, so a project
-that drops this kit in as a submodule never has to commit its own profile config or business
+that drops this engine in as a submodule never has to commit its own profile config or business
 facts into the engine's shared git history.
 
 This is the direct, flags-only path for scripted/CI use. For the Agent-driven, plain-language
@@ -65,8 +65,6 @@ def parse_args(argv):
         default=[],
         help="repeatable; extra never_access glob on top of the universal baseline",
     )
-    p.add_argument("--test-policy", default="risk_based_existing_scripts_only")
-    p.add_argument("--distribution", default="replit")
     p.add_argument("--business-file", default=None, help="defaults to ai/<profile>.md, relative to --target-root")
     p.add_argument("--force", action="store_true", help="overwrite an existing business file at the target path")
     return p.parse_args(argv)
@@ -90,8 +88,6 @@ def main(argv):
         backend_root=args.backend_root,
         description=args.description,
         extra_never_access=args.extra_never_access,
-        test_policy=args.test_policy,
-        distribution=args.distribution,
         business_file=args.business_file,
     )
     config_path, business_file_path = lib.write_profile(target_root, args.profile, entry, force=args.force)

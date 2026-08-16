@@ -4,7 +4,7 @@ Specification version: 6
 
 ## 1. Purpose
 
-Internal modes provide deterministic process selection, reporting, and validation across any project using this kit. Routers and skills select them automatically. Users describe outcomes and scope; they do not need to know, choose, or type mode identifiers.
+Internal modes provide deterministic process selection, reporting, and validation across any project using this engine. Routers and skills select them automatically. Users describe outcomes and scope; they do not need to know, choose, or type mode identifiers.
 
 ## 2. Rules
 

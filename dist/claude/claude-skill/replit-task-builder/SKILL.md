@@ -58,7 +58,7 @@ Do not emit HITL metadata for normal work. Do not trigger it merely for risk, co
 
 When triggered, adapt `references/hitl-decision-template.md` using the rules in `replit.md`. Return only the decision request: stable question ID, case number, exact question, evidence checked, unknowns, both options/tradeoffs for case 2, current/proposed boundary for case 3, smallest needed decision, effects, and required `DECIDE` response. Stop the entire task and wait; do not inspect, generate, execute, verify, or continue independent work.
 
-On the next user message, resume only if it provides `DECIDE [HITL-ID]: [answer and exact scope]` for the latest unresolved request. Validate that the answer resolves the question within existing authority. If it does not, return one narrowed follow-up with the same ID and remain paused. If it does, record the decision, require a minimal scoped drift check, and generate continuation from the exact blocked step without repeating completed discovery or phases.
+On the next user message, resume only if it provides `DECIDE [HITL-ID]: [answer and exact scope]` for the latest unresolved request. Validate that the answer resolves the question within existing authority. If it does not, return one narrowed follow-up with the same ID and remain paused. If it does, record the decision, require a minimal scoped drift check, and generate continuation from the exact blocked step without repeating completed discovery or phases. See `references/hitl-resume-example.md` for a worked case-2 decision and resume.
 
 ## Route references
 
@@ -98,7 +98,7 @@ Include:
 - creation gate only if a new unit may be needed;
 - bounded execution steps;
 - task-specific verification and honest result labels;
-- stop conditions, final diff, concise report, and definition of done.
+- stop conditions, final diff, concise report, and definition of done (see `references/parseable-final-report-example.md` for the expected report shape).
 - the three-case HITL pause rule, separate from internal process modes.
 
 For phased work, include the overall invariant and final definition of done once in the plan, then only the current phase scope and acceptance criteria in the generated prompt.
