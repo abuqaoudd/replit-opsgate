@@ -63,7 +63,7 @@ def cmd_validate_engine(argv):
         if frontmatter.get("name") != skill_file.parent.name:
             fail(f"Skill folder/name mismatch: {relative}")
         # The Mandatory HITL Gate and Per-Action Gate are defined once, authoritatively, in
-        # replit.md (see canonical/README-v6.md) - skills are not required to restate that
+        # replit.md (see canonical/ENGINE_ADOPTION_GUIDE.md) - skills are not required to restate that
         # reminder in their own words; every skill's step 1 pointing back to replit.md is
         # what actually keeps them honoring it.
         if "replit.md" not in text:

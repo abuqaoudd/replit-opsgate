@@ -28,7 +28,7 @@ one found by `OPSGATE_PROFILE_CONFIG`/directory walk from this process's
 current working directory. Start this server from the target project's own
 root (the outer project that vendors this engine as a submodule), or set
 `OPSGATE_PROFILE_CONFIG` explicitly, so that resolution finds the right file.
-See `canonical/README-v6.md` for what that file is and why it exists.
+See `canonical/ENGINE_ADOPTION_GUIDE.md` for what that file is and why it exists.
 
 Run:
 

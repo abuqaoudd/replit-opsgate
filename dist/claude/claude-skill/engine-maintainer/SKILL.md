@@ -7,7 +7,7 @@ description: Review, audit, extend, or fix this engine (Replit OpsGate) itself -
 
 This is instruction-system maintenance on the engine's own source, not on a target project's installed copy. Follow the same explicit-request discipline `replit.md`'s `instruction_maintenance` capability requires: only touch `canonical/**`, `tools/**`, and `mcp-server/**` the user actually asked about, and never edit `dist/**` directly - it is generated output, not source.
 
-`mcp-server/**` is real source, not a generated copy, but it is deliberately not wired into `build-distributions.py`/`DISTRIBUTIONS` (see `canonical/README-v6.md` "Exposing this project's tools remotely") - a change there needs the same `validate-engine.py`/`test-all.py`/version-bump/changelog discipline as `canonical/**`/`tools/**`, but never a distribution rebuild, and should be exercised with a real server boot and client round-trip when the change affects request handling, auth, or tool behavior, not just the static checks.
+`mcp-server/**` is real source, not a generated copy, but it is deliberately not wired into `build-distributions.py`/`DISTRIBUTIONS` (see `canonical/ENGINE_ADOPTION_GUIDE.md` "Exposing this project's tools remotely") - a change there needs the same `validate-engine.py`/`test-all.py`/version-bump/changelog discipline as `canonical/**`/`tools/**`, but never a distribution rebuild, and should be exercised with a real server boot and client round-trip when the change affects request handling, auth, or tool behavior, not just the static checks.
 
 ## Before changing anything
 

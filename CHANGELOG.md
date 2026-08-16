@@ -1,5 +1,11 @@
 # Changelog
 
+## 6.0.28 A Filename That Answers "Which README Is This" Instead Of "Which Version" - 2026-08-16
+
+- Renamed `canonical/README-v6.md` to `canonical/ENGINE_ADOPTION_GUIDE.md`. It was never a second copy of the root `README.md` - it's the engine's own bundled reference manual, covering how a Claude/Replit project adopts and configures this engine once vendored in (`apply-setup.py`/`init-profile.py` profile setup, why `ai/*.md` files don't list protected paths, MCP exposure/auth, the `metco` migration debt) - but naming it after a version number (`v6`) when nothing else in the repo carries one made it read as a stale duplicate of the root README rather than what it actually is.
+- Updated every reference to the old filename across live code and docs: `tools/opsgate_selftest.py`, `tools/opsgate_profiles.py`, `tools/apply-setup.py`, `tools/opsgate_contracts.py`, `canonical/references/replit.md`, `canonical/claude-skills/engine-maintainer/SKILL.md`, `mcp-server/README.md`, `mcp-server/opsgate_mcp_server.py`. Left `CHANGELOG.md`'s existing entries alone - they name the file that was literally true at the time they were written, same reasoning as every prior "kit" rename in this changelog.
+- Rebuilt `dist/claude`, `dist/replit`, and `dist/replit-install` (the last has its own separate build command, `build-replit-install.py`, and still had the stale reference in `replit.md` until it was rebuilt too). Confirmed by grep that zero live files reference `README-v6` afterward. `validate-engine.py`: 0 warnings. `test-all.py`: 63/63.
+
 ## 6.0.27 An Undocumented Duplicate Zip Nobody Could Explain - 2026-08-16
 
 - Removed `dist/claude/claude-skill/skill.zip`, a byte-identical copy of `replit-task-builder.zip` under a generic name that `cmd_build_distributions` (`tools/opsgate_packaging.py`) wrote on every build via `shutil.copy2(claude_root / "replit-task-builder.zip", claude_root / "skill.zip")`. Traced it back through git history and it predates every commit checked with zero comment, README mention, or changelog entry ever explaining its purpose - apparently a generic alias from whenever `replit-task-builder` was the engine's only Claude skill package, left behind after more packages were added and nothing ever pointed at it by that name.

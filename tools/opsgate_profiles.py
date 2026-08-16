@@ -30,7 +30,7 @@ _EXTERNAL_PROFILE_CACHE_KEY = None
 def external_profile_config_path():
     """Resolve the consuming project's own profile-override file, so a project that drops
     this engine in as a submodule never has to commit its own profile/business-file data into
-    the engine's shared repo (see canonical/README-v6.md "Adopting this engine" for why this
+    the engine's shared repo (see canonical/ENGINE_ADOPTION_GUIDE.md "Adopting this engine" for why this
     matters - a profile baked into opsgate_contracts.py ships inside this engine's own git
     history to every project that reuses it, which is fine for nothing project-specific but
     wrong for one project's actual business facts).

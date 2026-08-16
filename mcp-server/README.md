@@ -79,7 +79,7 @@ A request without a valid token gets `401 {"error": "unauthorized - missing or i
   them: the request's own `"profile"` field, or the `OPSGATE_PROFILE`
   environment variable set before the server starts.
 - The **external `opsgate.profile.json` override file** (see
-  `canonical/README-v6.md`) is found by walking up from this *process's own
+  `canonical/ENGINE_ADOPTION_GUIDE.md`) is found by walking up from this *process's own
   current working directory* - so start the server from the target project's
   root, or set `OPSGATE_PROFILE_CONFIG` explicitly to that file's path, before
   launching. `opsgate_show_profile` reports which one - if any - was found.

@@ -1,7 +1,7 @@
 # Generated engine contracts (Replit OpsGate). Edit this file instead of standalone JSON manifests.
 
 ENGINE_MANIFEST = {'name': 'replit-opsgate',
- 'version': '6.0.27',
+ 'version': '6.0.28',
  'release_date': '2026-08-16',
  'source_version': '6',
  'purpose': 'Canonical prompt, skill, and Replit engine foundation with object-oriented instruction '
@@ -367,7 +367,7 @@ PROFILES = {'default_profile': 'generic-replit',
                         'business_file': 'ai/metco.md',
                         'frontend_root': 'artifacts/metco/src',
                         'backend_root': 'artifacts/api-server/src'},
-              'generic-replit': {'description': "Default profile for any Replit project this engine is dropped into. frontend_root/backend_root are left unset (None) rather than guessed, since assuming a wrong folder name silently is worse than admitting it is not yet configured - set them by adding a project-specific profile (see canonical/README-v6.md) once the project's real roots are known.",
+              'generic-replit': {'description': "Default profile for any Replit project this engine is dropped into. frontend_root/backend_root are left unset (None) rather than guessed, since assuming a wrong folder name silently is worse than admitting it is not yet configured - set them by adding a project-specific profile (see canonical/ENGINE_ADOPTION_GUIDE.md) once the project's real roots are known.",
                                  'business_file': None,
                                  'frontend_root': None,
                                  'backend_root': None}}}

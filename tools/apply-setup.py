@@ -151,7 +151,7 @@ def copy_generic_ai_files(target_root, force):
     for item in sorted(source_dir.glob("*.md")):
         if item.stem == "metco":
             # ai/metco.md is METCO's own project-specific business file, still legacy-built
-            # into this engine (see canonical/README-v6.md's "Known migration debt") - it is
+            # into this engine (see canonical/ENGINE_ADOPTION_GUIDE.md's "Known migration debt") - it is
             # not a generic domain file and must never be copied into another project.
             continue
         dest = dest_dir / item.name

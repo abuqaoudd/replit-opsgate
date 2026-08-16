@@ -292,7 +292,7 @@ Use:
 
 The engine files guide routing and prompt generation. They do not grant write authority, bypass protected paths, or replace explicit user scope.
 
-If this engine is running against a project other than the one it was originally built for, confirm an `OPSGATE_PROFILE` environment variable is set (`generic-replit` if the project has no profile of its own yet - see `<engine-dir>/canonical/README-v6.md`) before relying on protected-path or scope results. Without it, the engine defaults to the original project's own paths, which do not apply here and should not be treated as this project's protections.
+If this engine is running against a project other than the one it was originally built for, confirm an `OPSGATE_PROFILE` environment variable is set (`generic-replit` if the project has no profile of its own yet - see `<engine-dir>/canonical/ENGINE_ADOPTION_GUIDE.md`) before relying on protected-path or scope results. Without it, the engine defaults to the original project's own paths, which do not apply here and should not be treated as this project's protections.
 
 ## 10. MCP tool availability
 
