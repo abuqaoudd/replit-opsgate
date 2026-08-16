@@ -1,6 +1,6 @@
 """Profile resolution and protected-path matching.
 
-Split out of opsgate_tools.py (the "structural refactor" pass, keeping every function body
+Split out of opsgate.py (the "structural refactor" pass, keeping every function body
 unchanged - this is a relocation, not a rewrite) because it's a genuinely separate concern from
 routing, prompt compilation, or command dispatch: everything here answers "which profile
 governs this run, and does this path violate it."

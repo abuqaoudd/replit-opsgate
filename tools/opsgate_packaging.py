@@ -1,6 +1,6 @@
 """Distribution packaging, upgrade diffing, and engine-alignment auditing.
 
-Split out of opsgate_tools.py (relocation, not a rewrite). These are the engine-maintenance
+Split out of opsgate.py (relocation, not a rewrite). These are the engine-maintenance
 commands - build-distributions, build-replit-install, diff-upgrade, release-notes, audit-engine
 - run by hand inside this repo, never called mid-task by a live agent (they're deliberately
 excluded from the MCP tool surface, see mcp-server/opsgate_mcp_server.py).
@@ -29,7 +29,7 @@ def relative_map(base):
 
 def cmd_diff_upgrade(argv):
     if not argv:
-        usage("Usage: python3 tools/opsgate_tools.py diff-upgrade <old-engine-root> [new-engine-root]")
+        usage("Usage: python3 tools/opsgate.py diff-upgrade <old-engine-root> [new-engine-root]")
     old_root = Path(argv[0]).resolve()
     new_root = Path(argv[1]).resolve() if len(argv) > 1 else ROOT_DIR / "canonical"
     old_map = relative_map(old_root)
@@ -58,7 +58,7 @@ def cmd_diff_upgrade(argv):
 
 def cmd_release_notes(argv):
     if not argv:
-        usage("Usage: python3 tools/opsgate_tools.py release-notes <old-engine-root>")
+        usage("Usage: python3 tools/opsgate.py release-notes <old-engine-root>")
     diff = json.loads(capture_python("diff-upgrade", [argv[0], "canonical"]))
     changed = "\n".join(f"- {item}" for item in diff["changed"]) or "- None"
     added_engine = "\n".join(f"- {item}" for item in [item for item in diff["added"] if "ENGINE" in item or "gold-standard" in item or "claude-skills" in item][:40]) or "- None detected"
@@ -76,7 +76,7 @@ Generated from upgrade diff.
 
 - Rebuild Claude distribution when project instructions, templates, references, specifications, or Claude skill sources changed.
 - Reinstall Replit distribution when `references/replit.md`, `references/ai/**`, or `references/replit-skills/**` changed.
-- Run `python3 tools/opsgate_tools.py validate-engine` before release.
+- Run `python3 tools/opsgate.py validate-engine` before release.
 
 ## Changed Files
 
@@ -159,7 +159,7 @@ def cmd_audit_engine(argv):
         rel = file_path.relative_to(ROOT_DIR / "dist/replit-install")
         check(f"root {rel} aligns", same_bytes(project_root / rel, file_path), str(rel))
     check("Python contracts exist", (ROOT_DIR / "tools/opsgate_contracts.py").exists(), "<engine-dir>/tools/opsgate_contracts.py")
-    check("tools exist", (ROOT_DIR / "tools/opsgate_tools.py").exists(), "<engine-dir>/tools/opsgate_tools.py")
+    check("tools exist", (ROOT_DIR / "tools/opsgate.py").exists(), "<engine-dir>/tools/opsgate.py")
     result = {"project_root": str(project_root), "checks": checks, "pass": not any(item["status"] == "FAILED" for item in checks)}
     print_json(result)
     if not result["pass"]:

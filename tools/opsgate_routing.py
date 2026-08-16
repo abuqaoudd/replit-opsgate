@@ -1,6 +1,6 @@
 """Request routing and word-aware signal scoring.
 
-Split out of opsgate_tools.py (relocation, not a rewrite). This is the "which deliverable,
+Split out of opsgate.py (relocation, not a rewrite). This is the "which deliverable,
 mode, skill, and references does this request route to" engine - a self-contained concern
 separate from prompt compilation, reports, or command dispatch.
 """

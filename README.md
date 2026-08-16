@@ -25,33 +25,33 @@ Both modes enforce the exact same rules from `tools/opsgate_contracts.py` - whic
 
 Run from this folder:
 
-Every command below except `init-profile.py` and `apply-setup.py` (real standalone scripts) runs through the one CLI entrypoint, `tools/opsgate_tools.py <command> [args...]` - there is no separate file per command.
+Every command below except `init-profile.py` and `apply-setup.py` (real standalone scripts) runs through the one CLI entrypoint, `tools/opsgate.py <command> [args...]` - there is no separate file per command.
 
 ```bash
-python3 tools/opsgate_tools.py build-distributions
-python3 tools/opsgate_tools.py validate-engine
-python3 tools/opsgate_tools.py test-all  # runs every command below against every fixture in one pass
-python3 tools/opsgate_tools.py route-request routing:frontend-task
-python3 tools/opsgate_tools.py compile-prompt routing:frontend-task
-python3 tools/opsgate_tools.py init-state routing:migration-task-missing-auth
-python3 tools/opsgate_tools.py parse-report fixtures/reports/sample-replit-final-report.md
-python3 tools/opsgate_tools.py intake-request "Audit the Roles module without changing code"
-python3 tools/opsgate_tools.py next-phase-prompt state:ready-phased-state reports:parsed-sample-report
-python3 tools/opsgate_tools.py build-replit-install
-python3 tools/opsgate_tools.py diff-upgrade ../audit_unpack/old-engine-root canonical
-python3 tools/opsgate_tools.py release-notes ../audit_unpack/old-engine-root
-python3 tools/opsgate_tools.py preflight routing:frontend-task
-python3 tools/opsgate_tools.py check-paths routing:frontend-task
-python3 tools/opsgate_tools.py show-profile  # resolved active profile, roots, and protected paths - no request file required
+python3 tools/opsgate.py build-distributions
+python3 tools/opsgate.py validate-engine
+python3 tools/opsgate.py test-all  # runs every command below against every fixture in one pass
+python3 tools/opsgate.py route-request routing:frontend-task
+python3 tools/opsgate.py compile-prompt routing:frontend-task
+python3 tools/opsgate.py init-state routing:migration-task-missing-auth
+python3 tools/opsgate.py parse-report fixtures/reports/sample-replit-final-report.md
+python3 tools/opsgate.py intake-request "Audit the Roles module without changing code"
+python3 tools/opsgate.py next-phase-prompt state:ready-phased-state reports:parsed-sample-report
+python3 tools/opsgate.py build-replit-install
+python3 tools/opsgate.py diff-upgrade ../audit_unpack/old-engine-root canonical
+python3 tools/opsgate.py release-notes ../audit_unpack/old-engine-root
+python3 tools/opsgate.py preflight routing:frontend-task
+python3 tools/opsgate.py check-paths routing:frontend-task
+python3 tools/opsgate.py show-profile  # resolved active profile, roots, and protected paths - no request file required
 python3 tools/init-profile.py --profile acme --target-root ../my-project --frontend-root client/src --backend-root server/src  # scaffold a new project profile + starter business file, written OUTSIDE this engine
 python3 tools/apply-setup.py --template PROJECT_SETUP.md --target-root .  # the primary onboarding path: materializes replit.md/ai/**/opsgate.profile.json from a filled-in plain-language template
-python3 tools/opsgate_tools.py check-capabilities routing:migration-task-missing-auth
-python3 tools/opsgate_tools.py lint-prompt fixtures/prompts/frontend-compiled-with-gate.md
-python3 tools/opsgate_tools.py lint-report fixtures/reports/sample-replit-final-report.md
-python3 tools/opsgate_tools.py audit-engine dist/replit-install
-python3 tools/opsgate_tools.py init-run routing:frontend-task
-python3 tools/opsgate_tools.py record-decision HITL-example-P1-Q1 "Use the approved feature owner only"
-python3 tools/opsgate_tools.py validate-json manifests/request.schema.json fixtures/routing/frontend-task.json
+python3 tools/opsgate.py check-capabilities routing:migration-task-missing-auth
+python3 tools/opsgate.py lint-prompt fixtures/prompts/frontend-compiled-with-gate.md
+python3 tools/opsgate.py lint-report fixtures/reports/sample-replit-final-report.md
+python3 tools/opsgate.py audit-engine dist/replit-install
+python3 tools/opsgate.py init-run routing:frontend-task
+python3 tools/opsgate.py record-decision HITL-example-P1-Q1 "Use the approved feature owner only"
+python3 tools/opsgate.py validate-json manifests/request.schema.json fixtures/routing/frontend-task.json
 ```
 
 ## Distribution model
@@ -87,7 +87,7 @@ The prompt compiler, state initializer, report parser, and upgrade diff command 
 
 ## Hard gate enforcement
 
-The engine includes `tools/opsgate_contracts.py` plus enforcement commands (all run via `python3 tools/opsgate_tools.py <command>`):
+The engine includes `tools/opsgate_contracts.py` plus enforcement commands (all run via `python3 tools/opsgate.py <command>`):
 
 - `preflight`
 - `check-paths`
@@ -105,7 +105,7 @@ The same enforcement tools above are also reachable as live MCP tools via `mcp-s
 Run:
 
 ```bash
-python3 tools/opsgate_tools.py build-replit-install
+python3 tools/opsgate.py build-replit-install
 ```
 
 Then use `dist/replit-install/` as the clean install folder for Replit. It contains only `replit.md`, `ai/**`, `.agents/skills/**`, and install notes.

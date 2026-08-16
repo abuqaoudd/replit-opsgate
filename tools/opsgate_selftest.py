@@ -1,6 +1,6 @@
 """The two release-gate self-test commands: validate-engine and test-all.
 
-Split out of opsgate_tools.py (relocation, not a rewrite). Kept together, separate from the
+Split out of opsgate.py (relocation, not a rewrite). Kept together, separate from the
 ordinary command implementations, because both exist purely to exercise every other command
 against every fixture - they are meta relative to everything else in this engine, not command
 implementations themselves.
@@ -222,7 +222,7 @@ def cmd_test_all(argv):
     def try_run(name, command, args, expect_exit=0):
         try:
             completed = subprocess.run(
-                [sys.executable, str(ROOT_DIR / "tools" / "opsgate_tools.py"), command, *args],
+                [sys.executable, str(ROOT_DIR / "tools" / "opsgate.py"), command, *args],
                 cwd=ROOT_DIR, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
             )
             ok = completed.returncode == expect_exit

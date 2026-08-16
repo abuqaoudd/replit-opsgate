@@ -1,7 +1,7 @@
 """Structural validation helpers: markdown report/prompt parsing and a lightweight JSON-Schema
 subset validator.
 
-Split out of opsgate_tools.py (relocation, not a rewrite). Everything here answers "does this
+Split out of opsgate.py (relocation, not a rewrite). Everything here answers "does this
 document/data have the shape it's required to have" - used by the lint-report, lint-prompt,
 and validate-json commands.
 """

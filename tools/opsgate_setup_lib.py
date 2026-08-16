@@ -2,7 +2,7 @@
 tools/init-profile.py (direct CLI flags, for scripted/CI use) and tools/apply-setup.py (parses a
 filled-in PROJECT_SETUP_TEMPLATE.md, for the Agent-driven first-run setup flow described in
 canonical/references/replit.md). Kept in one place so both tools write the exact same
-opsgate.profile.json shape that tools/opsgate_tools.py's load_external_profile_config() expects,
+opsgate.profile.json shape that tools/opsgate.py's load_external_profile_config() expects,
 and the exact same business-file structure ai/metco.md follows.
 
 Nothing here ever writes inside this engine's own directory - every function takes an explicit
@@ -137,7 +137,7 @@ def validate_profile_key(profile):
 def resolve_existing_target_root(explicit_target_root):
     """Find the outer project's root for a call that expects opsgate.profile.json to already
     exist (a second+ profile, or any apply-setup.py run after the first). Skips the .git-based
-    stop at the starting directory itself, same reasoning as opsgate_tools.py's
+    stop at the starting directory itself, same reasoning as opsgate.py's
     external_profile_config_path() - the engine's own directory almost always has its own .git
     when used as a submodule, and that must not block the walk from reaching the outer project."""
     if explicit_target_root:

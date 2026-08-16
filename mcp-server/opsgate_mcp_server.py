@@ -2,11 +2,11 @@
 """HTTP MCP server exposing this engine's own gate/routing tools remotely.
 
 What this is: a thin adapter, not a reimplementation. Every tool below shells
-out to the exact same `cmd_*` function `tools/opsgate_tools.py`'s own CLI
+out to the exact same `cmd_*` function `tools/opsgate.py`'s own CLI
 entrypoints call - it writes the caller's input to a temp file, invokes the
 real command, captures whatever it printed, and hands that straight back.
 Nothing about routing, gates, protected paths, or profile resolution is
-duplicated or reimplemented here; if `opsgate_tools.py` changes, this file
+duplicated or reimplemented here; if `opsgate.py` changes, this file
 does not need to.
 
 Tool names match the convention `replit.md` Section 10 already documents
@@ -17,7 +17,7 @@ that section needs no new instructions to use this server once it is
 registered - the tool names it was told to expect are the tool names here.
 
 Where this lives: `<engine-dir>/mcp-server/opsgate_mcp_server.py`, a sibling
-of `tools/`. It imports `opsgate_tools.py` directly from the real `tools/`
+of `tools/`. It imports `opsgate.py` directly from the real `tools/`
 directory next to it, so `ROOT_DIR` inside that module resolves exactly the
 way it does for the CLI - this server does not run against a copy.
 
@@ -63,16 +63,16 @@ from pathlib import Path
 
 SERVER_DIR = Path(__file__).resolve().parent
 ENGINE_TOOLS_DIR = SERVER_DIR.parent / "tools"
-if not (ENGINE_TOOLS_DIR / "opsgate_tools.py").exists():
+if not (ENGINE_TOOLS_DIR / "opsgate.py").exists():
     sys.exit(
-        f"Expected to find opsgate_tools.py in {ENGINE_TOOLS_DIR}, but it is not there.\n"
+        f"Expected to find opsgate.py in {ENGINE_TOOLS_DIR}, but it is not there.\n"
         "This server must live in a 'mcp-server/' folder that sits next to this engine's "
         "own 'tools/' folder (i.e. <engine-dir>/mcp-server/opsgate_mcp_server.py) - move it "
         "there and re-run."
     )
 sys.path.insert(0, str(ENGINE_TOOLS_DIR))
 
-import opsgate_tools  # noqa: E402  (import must follow the sys.path fix-up above)
+import opsgate  # noqa: E402  (import must follow the sys.path fix-up above)
 
 try:
     from mcp.server.fastmcp import FastMCP
@@ -99,7 +99,7 @@ mcp = FastMCP(
 
 # ---------------------------------------------------------------------------
 # Adapter plumbing - every function below wraps an existing cmd_* function
-# from opsgate_tools.py exactly as the CLI calls it: write input to a temp
+# from opsgate.py exactly as the CLI calls it: write input to a temp
 # file, invoke the real function with that path in argv, capture whatever it
 # printed to stdout, and return that. A cmd_* function that fails a gate
 # calls `raise SystemExit(1)` *after* printing its JSON result - that JSON
@@ -166,7 +166,7 @@ def _parse_json_or_wrap(raw):
 
 
 # ---------------------------------------------------------------------------
-# Tools - one per runtime cmd_* function in opsgate_tools.py. Maintenance-only
+# Tools - one per runtime cmd_* function in opsgate.py. Maintenance-only
 # commands (build-distributions, build-replit-install, audit-engine,
 # diff-upgrade, release-notes, validate-json, validate-engine, test-all) are
 # deliberately not exposed here - those are engine-authoring operations run
@@ -183,7 +183,7 @@ def _parse_json_or_wrap(raw):
     ),
 )
 def opsgate_route_request(request: dict) -> dict:
-    return _run_json_in_json_out(opsgate_tools.cmd_route_request, request)
+    return _run_json_in_json_out(opsgate.cmd_route_request, request)
 
 
 @mcp.tool(
@@ -195,7 +195,7 @@ def opsgate_route_request(request: dict) -> dict:
     ),
 )
 def opsgate_check_capability(request: dict) -> dict:
-    return _run_json_in_json_out(opsgate_tools.cmd_check_capabilities, request)
+    return _run_json_in_json_out(opsgate.cmd_check_capabilities, request)
 
 
 @mcp.tool(
@@ -207,7 +207,7 @@ def opsgate_check_capability(request: dict) -> dict:
     ),
 )
 def opsgate_check_paths(request: dict) -> dict:
-    return _run_json_in_json_out(opsgate_tools.cmd_check_paths, request)
+    return _run_json_in_json_out(opsgate.cmd_check_paths, request)
 
 
 @mcp.tool(
@@ -220,7 +220,7 @@ def opsgate_check_paths(request: dict) -> dict:
     ),
 )
 def opsgate_preflight(request: dict) -> dict:
-    return _run_json_in_json_out(opsgate_tools.cmd_preflight, request)
+    return _run_json_in_json_out(opsgate.cmd_preflight, request)
 
 
 @mcp.tool(
@@ -232,7 +232,7 @@ def opsgate_preflight(request: dict) -> dict:
     ),
 )
 def opsgate_show_profile(request: dict | None = None) -> dict:
-    return _run_json_in_json_out(opsgate_tools.cmd_show_profile, request or {})
+    return _run_json_in_json_out(opsgate.cmd_show_profile, request or {})
 
 
 @mcp.tool(
@@ -244,7 +244,7 @@ def opsgate_show_profile(request: dict | None = None) -> dict:
     ),
 )
 def opsgate_init_state(request: dict) -> dict:
-    return _run_json_in_json_out(opsgate_tools.cmd_init_state, request)
+    return _run_json_in_json_out(opsgate.cmd_init_state, request)
 
 
 @mcp.tool(
@@ -257,7 +257,7 @@ def opsgate_init_state(request: dict) -> dict:
     ),
 )
 def opsgate_init_run(request: dict) -> dict:
-    return _run_json_in_json_out(opsgate_tools.cmd_init_run, request)
+    return _run_json_in_json_out(opsgate.cmd_init_run, request)
 
 
 @mcp.tool(
@@ -269,7 +269,7 @@ def opsgate_init_run(request: dict) -> dict:
     ),
 )
 def opsgate_compile_prompt(request: dict) -> str:
-    return _run_json_in_text_out(opsgate_tools.cmd_compile_prompt, request)
+    return _run_json_in_text_out(opsgate.cmd_compile_prompt, request)
 
 
 @mcp.tool(
@@ -285,7 +285,7 @@ def opsgate_next_phase_prompt(run_state: dict, parsed_report: dict) -> str:
     state_path = _write_temp(json.dumps(run_state or {}), ".json")
     report_path = _write_temp(json.dumps(parsed_report or {}), ".json")
     try:
-        return _capture_stdout(opsgate_tools.cmd_next_phase_prompt, [state_path, report_path])
+        return _capture_stdout(opsgate.cmd_next_phase_prompt, [state_path, report_path])
     finally:
         os.remove(state_path)
         os.remove(report_path)
@@ -301,7 +301,7 @@ def opsgate_next_phase_prompt(run_state: dict, parsed_report: dict) -> str:
     ),
 )
 def opsgate_intake_request(text: str) -> dict:
-    raw = _capture_stdout(opsgate_tools.cmd_intake_request, [text or ""])
+    raw = _capture_stdout(opsgate.cmd_intake_request, [text or ""])
     return _parse_json_or_wrap(raw)
 
 
@@ -314,7 +314,7 @@ def opsgate_intake_request(text: str) -> dict:
     ),
 )
 def opsgate_parse_report(report_markdown: str) -> dict:
-    return _run_text_in_json_out(opsgate_tools.cmd_parse_report, report_markdown, ".md")
+    return _run_text_in_json_out(opsgate.cmd_parse_report, report_markdown, ".md")
 
 
 @mcp.tool(
@@ -327,7 +327,7 @@ def opsgate_parse_report(report_markdown: str) -> dict:
     ),
 )
 def opsgate_lint_report(report_markdown: str) -> dict:
-    return _run_text_in_json_out(opsgate_tools.cmd_lint_report, report_markdown, ".md")
+    return _run_text_in_json_out(opsgate.cmd_lint_report, report_markdown, ".md")
 
 
 @mcp.tool(
@@ -340,7 +340,7 @@ def opsgate_lint_report(report_markdown: str) -> dict:
     ),
 )
 def opsgate_lint_prompt(prompt_markdown: str) -> dict:
-    return _run_text_in_json_out(opsgate_tools.cmd_lint_prompt, prompt_markdown, ".md")
+    return _run_text_in_json_out(opsgate.cmd_lint_prompt, prompt_markdown, ".md")
 
 
 @mcp.tool(
@@ -352,7 +352,7 @@ def opsgate_lint_prompt(prompt_markdown: str) -> dict:
     ),
 )
 def opsgate_record_decision(hitl_id: str, answer: str) -> dict:
-    raw = _capture_stdout(opsgate_tools.cmd_record_decision, [hitl_id, answer])
+    raw = _capture_stdout(opsgate.cmd_record_decision, [hitl_id, answer])
     return _parse_json_or_wrap(raw)
 
 

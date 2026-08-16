@@ -13,7 +13,7 @@ future automation call into (see tools/opsgate_setup_lib.py).
 Writes two things at --target-root (the outer project's own root, NOT anywhere inside this
 engine):
 
-  <target-root>/opsgate.profile.json   - profile + protected-path config; tools/opsgate_tools.py's
+  <target-root>/opsgate.profile.json   - profile + protected-path config; tools/opsgate.py's
                                           read_json() merges this on top of the built-in
                                           metco/generic-replit profiles at runtime.
   <target-root>/ai/<profile>.md        - starter business file, structured like ai/metco.md,
@@ -103,7 +103,7 @@ def main(argv):
     print("  1. Fill in the Business Facts section of the generated business file.")
     print(f"  2. Set OPSGATE_PROFILE={args.profile} (or pass \"profile\": \"{args.profile}\" on requests).")
     print(
-        "  3. Nothing in this engine's own repo needs to change - tools/opsgate_tools.py's "
+        "  3. Nothing in this engine's own repo needs to change - tools/opsgate.py's "
         f"read_json() picks up {config_path.name} automatically by walking up from wherever "
         "the tools are run, or via OPSGATE_PROFILE_CONFIG if that walk won't reach it."
     )

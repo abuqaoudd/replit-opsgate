@@ -1,6 +1,6 @@
 """Compiled Replit/artifact prompt text generation.
 
-Split out of opsgate_tools.py (relocation, not a rewrite). Everything here builds the actual
+Split out of opsgate.py (relocation, not a rewrite). Everything here builds the actual
 markdown prompt text handed to an implementing agent - the Mandatory HITL Gate block, the
 Per-Action Gate line, discovery steps, and the per-deliverable artifact prompt bodies.
 """

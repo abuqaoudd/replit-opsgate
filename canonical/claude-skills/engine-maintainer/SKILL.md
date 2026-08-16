@@ -18,8 +18,8 @@ This is instruction-system maintenance on the engine's own source, not on a targ
 ## Making the change
 
 1. Edit `canonical/**`, `tools/**`, and/or `mcp-server/**` only - never `dist/**`.
-2. If anything under `canonical/**` changed, run `python3 tools/opsgate_tools.py build-distributions` before validating, so the generated `dist/claude` and `dist/replit` copies aren't flagged as drifted.
-3. Run `python3 tools/opsgate_tools.py validate-engine` - it must report 0 warnings. Run `python3 tools/opsgate_tools.py test-all` - it must report every check passing. Both must pass before the change is considered done; fix regressions, don't rationalize them.
+2. If anything under `canonical/**` changed, run `python3 tools/opsgate.py build-distributions` before validating, so the generated `dist/claude` and `dist/replit` copies aren't flagged as drifted.
+3. Run `python3 tools/opsgate.py validate-engine` - it must report 0 warnings. Run `python3 tools/opsgate.py test-all` - it must report every check passing. Both must pass before the change is considered done; fix regressions, don't rationalize them.
 4. Bump both `package.py`'s `PACKAGE.version` and `tools/opsgate_contracts.py`'s `ENGINE_MANIFEST.version` together (they must always match), and add a `CHANGELOG.md` entry above the previous top entry, in the engine's established style: what changed, the concrete motivation/root cause, and what was verified. A version bump with no changelog entry, or a changelog entry with no version bump, is incomplete.
 5. Re-run `validate-engine.py` and `test-all.py` once more after the version/changelog edit, since `opsgate_contracts.py` changed too.
 

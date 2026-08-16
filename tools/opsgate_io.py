@@ -1,6 +1,6 @@
 """Generic file I/O, fixture/data loading, and small shared CLI helpers.
 
-Split out of opsgate_tools.py (relocation, not a rewrite - every function body below is
+Split out of opsgate.py (relocation, not a rewrite - every function body below is
 unchanged from where it used to live). Nothing here knows about profiles, routing, or prompt
 content; it's the low-level layer everything else is built on.
 """
@@ -107,11 +107,11 @@ def load_request(path):
 
 
 def capture_python(command, args):
-    return subprocess.check_output([sys.executable, str(ROOT_DIR / "tools" / "opsgate_tools.py"), command, *args], cwd=ROOT_DIR, text=True)
+    return subprocess.check_output([sys.executable, str(ROOT_DIR / "tools" / "opsgate.py"), command, *args], cwd=ROOT_DIR, text=True)
 
 
 def run_python(command, args, expect=None):
-    completed = subprocess.run([sys.executable, str(ROOT_DIR / "tools" / "opsgate_tools.py"), command, *args], cwd=ROOT_DIR, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    completed = subprocess.run([sys.executable, str(ROOT_DIR / "tools" / "opsgate.py"), command, *args], cwd=ROOT_DIR, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     if expect is not None and completed.returncode != expect:
         raise RuntimeError(completed.stderr or completed.stdout)
     if expect is None and completed.returncode != 0:

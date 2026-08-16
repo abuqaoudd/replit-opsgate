@@ -1,18 +1,18 @@
 # opsgate MCP server
 
-Exposes this engine's own gate/routing/lint tools (`tools/opsgate_tools.py`) as an
+Exposes this engine's own gate/routing/lint tools (`tools/opsgate.py`) as an
 HTTP-based MCP server, so a remote agent (e.g. Replit's Connect via MCP) can call
 them directly instead of an agent inside this repo shelling out to the CLI.
 
 This is an adapter, not a reimplementation - every tool here calls the exact same
-`cmd_*` function the CLI calls (`python3 tools/opsgate_tools.py check-paths`,
+`cmd_*` function the CLI calls (`python3 tools/opsgate.py check-paths`,
 `... preflight`, etc.), and returns exactly what that function would print. If
-`opsgate_tools.py` changes, this file does not need to.
+`opsgate.py` changes, this file does not need to.
 
 ## Where this lives
 
 `<engine-dir>/mcp-server/opsgate_mcp_server.py`, as a sibling of `tools/` and
-`canonical/`. It imports `opsgate_tools.py` directly from the real `tools/`
+`canonical/`. It imports `opsgate.py` directly from the real `tools/`
 directory next to it, so paths and profile resolution behave exactly as they do
 for the CLI.
 
