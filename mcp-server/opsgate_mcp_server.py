@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """HTTP MCP server exposing this engine's own gate/routing tools remotely.
 
-What this is: a thin adapter, not a reimplementation. Every tool below shells
-out to the exact same `cmd_*` function `tools/opsgate.py`'s own CLI
-entrypoints call - it writes the caller's input to a temp file, invokes the
-real command, captures whatever it printed, and hands that straight back.
-Nothing about routing, gates, protected paths, or profile resolution is
-duplicated or reimplemented here; if `opsgate.py` changes, this file
-does not need to.
+Every tool below calls opsgate.py's pure core functions (check_capabilities_result,
+check_paths_result, preflight_result, etc.) directly, in-process - no temp files, no stdout
+capture. The CLI's own cmd_* wrappers still exist unchanged for `python3 tools/opsgate.py
+<command>`, but this server calls straight past them into the pure functions they themselves
+call. Nothing about routing, gate logic, or prompt compilation is duplicated here; the pure
+functions in opsgate.py/opsgate_prompts.py/opsgate_tenants.py are the single source of truth
+for both callers.
 
 Tool names match the convention `replit.md` Section 10 already documents
 ("MCP tool availability") - `opsgate_` prefix, e.g. `opsgate_check_capability`,
@@ -21,14 +21,13 @@ of `tools/`. It imports `opsgate.py` directly from the real `tools/`
 directory next to it, so `ROOT_DIR` inside that module resolves exactly the
 way it does for the CLI - this server does not run against a copy.
 
-Which project this server answers for: whichever profile the caller's own
-request JSON specifies (`"profile": "..."`), or - for the external
-`opsgate.profile.json` override file itself, not the built-in profiles - the
-one found by `OPSGATE_PROFILE_CONFIG`/directory walk from this process's
-current working directory. Start this server from the target project's own
-root (the outer project that vendors this engine as a submodule), or set
-`OPSGATE_PROFILE_CONFIG` explicitly, so that resolution finds the right file.
-See `canonical/ENGINE_ADOPTION_GUIDE.md` for what that file is and why it exists.
+Which tenant this server answers for, per call: the `X-Opsgate-Token` header value is checked
+first against the multi-tenant store (`opsgate_tenants.resolve_tenant_from_token`) - if it
+resolves, that tenant's own profile/protected-paths from the tenant store govern the call. If
+the header does not match any tenant token, it falls back to the single shared
+`--token`/`OPSGATE_MCP_TOKEN` server-access secret, and the call resolves to
+`opsgate_tenants.LOCAL_DEV_TENANT_ID` - a safe, always-available default with no roots assumed.
+Both paths are real and fully supported at once.
 
 Run:
 
@@ -51,14 +50,11 @@ once to stderr at startup. See `mcp-server/README.md` for details.
 """
 
 import argparse
-import contextlib
+import contextvars
 import hmac
-import io
-import json
 import os
 import secrets
 import sys
-import tempfile
 from pathlib import Path
 
 SERVER_DIR = Path(__file__).resolve().parent
@@ -73,6 +69,8 @@ if not (ENGINE_TOOLS_DIR / "opsgate.py").exists():
 sys.path.insert(0, str(ENGINE_TOOLS_DIR))
 
 import opsgate  # noqa: E402  (import must follow the sys.path fix-up above)
+import opsgate_knowledge  # noqa: E402
+import opsgate_tenants  # noqa: E402
 
 try:
     from mcp.server.fastmcp import FastMCP
@@ -98,79 +96,28 @@ mcp = FastMCP(
 
 
 # ---------------------------------------------------------------------------
-# Adapter plumbing - every function below wraps an existing cmd_* function
-# from opsgate.py exactly as the CLI calls it: write input to a temp
-# file, invoke the real function with that path in argv, capture whatever it
-# printed to stdout, and return that. A cmd_* function that fails a gate
-# calls `raise SystemExit(1)` *after* printing its JSON result - that JSON
-# (e.g. `"can_proceed": false`) is the actual answer the caller wants, not an
-# error, so this always captures stdout regardless of exit code and never
-# raises to the MCP layer for a normal gate failure.
+# Tenant resolution. TokenAuthMiddleware (below) sets this contextvar to the
+# resolved tenant ID for the duration of each HTTP request, before the MCP
+# request-handling code runs in the same async task - reading it here from
+# inside a tool function gets the exact token that authenticated this call,
+# with no dependency on any MCP-SDK-internal request-context mechanism.
+# `None` means the shared-secret path (no tenant token) authenticated this
+# call; _active_tenant_id() resolves that to opsgate_tenants.LOCAL_DEV_TENANT_ID,
+# the same safe, always-available identity the bare CLI defaults to.
 # ---------------------------------------------------------------------------
 
-
-def _capture_stdout(cmd_func, argv):
-    buffer = io.StringIO()
-    try:
-        with contextlib.redirect_stdout(buffer):
-            cmd_func(argv)
-    except SystemExit:
-        pass  # Expected control flow for a failed gate - the JSON was already printed above.
-    return buffer.getvalue().strip()
+_current_tenant_id = contextvars.ContextVar("_current_tenant_id", default=None)
 
 
-def _write_temp(text, suffix):
-    fd, path = tempfile.mkstemp(suffix=suffix, prefix="opsgate-mcp-")
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            handle.write(text)
-    except Exception:
-        os.remove(path)
-        raise
-    return path
-
-
-def _run_json_in_json_out(cmd_func, request):
-    path = _write_temp(json.dumps(request or {}), ".json")
-    try:
-        raw = _capture_stdout(cmd_func, [path])
-    finally:
-        os.remove(path)
-    return _parse_json_or_wrap(raw)
-
-
-def _run_json_in_text_out(cmd_func, request):
-    path = _write_temp(json.dumps(request or {}), ".json")
-    try:
-        return _capture_stdout(cmd_func, [path])
-    finally:
-        os.remove(path)
-
-
-def _run_text_in_json_out(cmd_func, text, suffix=".md"):
-    path = _write_temp(text or "", suffix)
-    try:
-        raw = _capture_stdout(cmd_func, [path])
-    finally:
-        os.remove(path)
-    return _parse_json_or_wrap(raw)
-
-
-def _parse_json_or_wrap(raw):
-    if not raw:
-        return {"error": "the underlying command produced no output"}
-    try:
-        return json.loads(raw)
-    except json.JSONDecodeError:
-        return {"error": "the underlying command did not produce valid JSON", "raw_output": raw}
+def _active_tenant_id():
+    return _current_tenant_id.get() or opsgate_tenants.LOCAL_DEV_TENANT_ID
 
 
 # ---------------------------------------------------------------------------
 # Tools - one per runtime cmd_* function in opsgate.py. Maintenance-only
-# commands (build-distributions, build-replit-install, audit-engine,
-# diff-upgrade, release-notes, validate-json, validate-engine, test-all) are
-# deliberately not exposed here - those are engine-authoring operations run
-# by hand inside this repo, not gate/routing calls a live Replit task needs.
+# commands (validate-json, validate-engine, test-all) are deliberately not
+# exposed here - those are engine-authoring operations run by hand inside
+# this repo, not gate/routing calls a live Replit task needs.
 # ---------------------------------------------------------------------------
 
 
@@ -183,7 +130,7 @@ def _parse_json_or_wrap(raw):
     ),
 )
 def opsgate_route_request(request: dict) -> dict:
-    return _run_json_in_json_out(opsgate.cmd_route_request, request)
+    return opsgate.route_request(request or {})
 
 
 @mcp.tool(
@@ -195,7 +142,7 @@ def opsgate_route_request(request: dict) -> dict:
     ),
 )
 def opsgate_check_capability(request: dict) -> dict:
-    return _run_json_in_json_out(opsgate.cmd_check_capabilities, request)
+    return opsgate.check_capabilities_result(request or {})
 
 
 @mcp.tool(
@@ -207,7 +154,7 @@ def opsgate_check_capability(request: dict) -> dict:
     ),
 )
 def opsgate_check_paths(request: dict) -> dict:
-    return _run_json_in_json_out(opsgate.cmd_check_paths, request)
+    return opsgate.check_paths_result(request or {}, tenant_id=_active_tenant_id())
 
 
 @mcp.tool(
@@ -220,19 +167,20 @@ def opsgate_check_paths(request: dict) -> dict:
     ),
 )
 def opsgate_preflight(request: dict) -> dict:
-    return _run_json_in_json_out(opsgate.cmd_preflight, request)
+    return opsgate.preflight_result(request or {}, tenant_id=_active_tenant_id())
 
 
 @mcp.tool(
     name="opsgate_show_profile",
     description=(
-        "Show which profile is currently active (env var, request field, or default), its "
-        "resolved frontend/backend roots, and its protected paths - with no request required. "
-        "Pass an empty object, or a request with a \"profile\" field to check a specific one."
+        "Show which profile is currently active (tenant token, env var, request field, or "
+        "default), its resolved frontend/backend roots, and its protected paths - with no "
+        "request required. Pass an empty object, or a request with a \"profile\" field to "
+        "check a specific legacy (non-tenant) profile."
     ),
 )
 def opsgate_show_profile(request: dict | None = None) -> dict:
-    return _run_json_in_json_out(opsgate.cmd_show_profile, request or {})
+    return opsgate.show_profile_result(request or {}, tenant_id=_active_tenant_id())
 
 
 @mcp.tool(
@@ -244,7 +192,7 @@ def opsgate_show_profile(request: dict | None = None) -> dict:
     ),
 )
 def opsgate_init_state(request: dict) -> dict:
-    return _run_json_in_json_out(opsgate.cmd_init_state, request)
+    return opsgate.init_state_result(request or {})
 
 
 @mcp.tool(
@@ -257,7 +205,7 @@ def opsgate_init_state(request: dict) -> dict:
     ),
 )
 def opsgate_init_run(request: dict) -> dict:
-    return _run_json_in_json_out(opsgate.cmd_init_run, request)
+    return opsgate.init_run_result(request or {})
 
 
 @mcp.tool(
@@ -269,7 +217,7 @@ def opsgate_init_run(request: dict) -> dict:
     ),
 )
 def opsgate_compile_prompt(request: dict) -> str:
-    return _run_json_in_text_out(opsgate.cmd_compile_prompt, request)
+    return opsgate.compile_prompt_text(request or {}, tenant_id=_active_tenant_id())
 
 
 @mcp.tool(
@@ -282,13 +230,7 @@ def opsgate_compile_prompt(request: dict) -> str:
     ),
 )
 def opsgate_next_phase_prompt(run_state: dict, parsed_report: dict) -> str:
-    state_path = _write_temp(json.dumps(run_state or {}), ".json")
-    report_path = _write_temp(json.dumps(parsed_report or {}), ".json")
-    try:
-        return _capture_stdout(opsgate.cmd_next_phase_prompt, [state_path, report_path])
-    finally:
-        os.remove(state_path)
-        os.remove(report_path)
+    return opsgate.next_phase_prompt_text(run_state or {}, parsed_report or {})
 
 
 @mcp.tool(
@@ -301,8 +243,7 @@ def opsgate_next_phase_prompt(run_state: dict, parsed_report: dict) -> str:
     ),
 )
 def opsgate_intake_request(text: str) -> dict:
-    raw = _capture_stdout(opsgate.cmd_intake_request, [text or ""])
-    return _parse_json_or_wrap(raw)
+    return opsgate.intake_request_result(text or "")
 
 
 @mcp.tool(
@@ -314,7 +255,7 @@ def opsgate_intake_request(text: str) -> dict:
     ),
 )
 def opsgate_parse_report(report_markdown: str) -> dict:
-    return _run_text_in_json_out(opsgate.cmd_parse_report, report_markdown, ".md")
+    return opsgate.parse_report_result(report_markdown or "")
 
 
 @mcp.tool(
@@ -327,7 +268,7 @@ def opsgate_parse_report(report_markdown: str) -> dict:
     ),
 )
 def opsgate_lint_report(report_markdown: str) -> dict:
-    return _run_text_in_json_out(opsgate.cmd_lint_report, report_markdown, ".md")
+    return opsgate.lint_report_result(report_markdown or "")
 
 
 @mcp.tool(
@@ -340,7 +281,7 @@ def opsgate_lint_report(report_markdown: str) -> dict:
     ),
 )
 def opsgate_lint_prompt(prompt_markdown: str) -> dict:
-    return _run_text_in_json_out(opsgate.cmd_lint_prompt, prompt_markdown, ".md")
+    return opsgate.lint_prompt_result(prompt_markdown or "")
 
 
 @mcp.tool(
@@ -352,8 +293,85 @@ def opsgate_lint_prompt(prompt_markdown: str) -> dict:
     ),
 )
 def opsgate_record_decision(hitl_id: str, answer: str) -> dict:
-    raw = _capture_stdout(opsgate.cmd_record_decision, [hitl_id, answer])
-    return _parse_json_or_wrap(raw)
+    return opsgate.record_decision_result(hitl_id, answer)
+
+
+# ---------------------------------------------------------------------------
+# Always-on knowledge resources - not tenant-scoped or route-conditional, unlike the tools
+# above; every caller gets the same durable rules regardless of profile or request shape.
+# opsgate_knowledge.py reads these live from their canonical source files, so nothing here
+# can drift out of sync with that source.
+# ---------------------------------------------------------------------------
+
+
+@mcp.resource(
+    "opsgate://knowledge/hitl-protocol",
+    name="HITL protocol",
+    description="The full Human-in-the-Loop specification: exclusive triggers, pre-trigger test, check frequency, pause contract, decision request format, resume protocol, and final evidence.",
+    mime_type="text/markdown",
+)
+def opsgate_hitl_protocol_resource() -> str:
+    return opsgate_knowledge.hitl_protocol_text()
+
+
+@mcp.resource(
+    "opsgate://knowledge/security-rules",
+    name="Security rules",
+    description="Durable security rules (identity, authorization, sensitive data, uploads, logging, mutations, integrations, leakage prevention) - routing/activation prose is omitted since this resource is always on.",
+    mime_type="text/markdown",
+)
+def opsgate_security_rules_resource() -> str:
+    return opsgate_knowledge.security_rules_text()
+
+
+@mcp.resource(
+    "opsgate://knowledge/skill-workflow/{skill}",
+    name="Skill workflow",
+    description=(
+        "The durable numbered workflow procedure for one replit-skills entry (e.g. "
+        "'auth-permission-workflow', 'database-schema-migration') - unlike the HITL/security "
+        "resources above, this is per-skill, not always-on: fetch it for the specific skill "
+        "opsgate_route_request/opsgate_compile_prompt resolved for the current request. Routing "
+        "scaffolding (frontmatter, mode-select sentence, reference-reading step) is already "
+        "covered by ROUTING_MANIFEST and opsgate_compile_prompt's own output, so it's omitted here."
+    ),
+    mime_type="text/markdown",
+)
+def opsgate_skill_workflow_resource(skill: str) -> str:
+    return opsgate_knowledge.skill_workflow_text(skill)
+
+
+@mcp.resource(
+    "opsgate://knowledge/instruction-object/{name}",
+    name="Instruction object",
+    description=(
+        "The durable rules of one ai/*.md domain instruction object (e.g. 'backend', "
+        "'frontend', 'database', 'ui-ux', 'testing', 'refactoring', 'agents', 'maintenance' - "
+        "'security' is also reachable here, though it's covered unconditionally by the "
+        "always-on security-rules resource above). Per-route, not always-on: fetch the ones "
+        "named in the current route's ROUTING_MANIFEST references, surfaced via "
+        "opsgate_route_request/opsgate_compile_prompt. Routing scaffolding (the object's "
+        "Activation section and, for most objects, its pre-Activation summary line) is "
+        "already covered by that same routing data, so it's omitted here."
+    ),
+    mime_type="text/markdown",
+)
+def opsgate_instruction_object_resource(name: str) -> str:
+    return opsgate_knowledge.instruction_object_text(name)
+
+
+@mcp.tool(
+    name="opsgate_export_ruleset",
+    description=(
+        "Read-only snapshot of every rule this server currently exposes as knowledge "
+        "resources - the always-on HITL protocol and security rules, every per-skill workflow "
+        "procedure keyed by skill name, and every domain instruction object keyed by name - "
+        "along with the canonical source path each came from. For offline/CI use where "
+        "reading the live MCP resources isn't practical."
+    ),
+)
+def opsgate_export_ruleset() -> dict:
+    return opsgate_knowledge.export_ruleset()
 
 
 # ---------------------------------------------------------------------------
@@ -382,6 +400,13 @@ AUTH_HEADER_NAME = b"x-opsgate-token"
 
 
 class TokenAuthMiddleware:
+    """Checks the X-Opsgate-Token header against the tenant store first - if it resolves to a
+    real tenant, that tenant governs this call (see _active_tenant_id() above) and the shared-
+    secret check below is skipped entirely for this request. If it does not resolve to any
+    tenant, this falls back to the single shared --token/OPSGATE_MCP_TOKEN secret, checked with
+    the same constant-time comparison either way. A request that matches neither is rejected -
+    there is no path that skips authentication."""
+
     def __init__(self, app, token):
         self.app = app
         self.token = token
@@ -392,11 +417,16 @@ class TokenAuthMiddleware:
             return
         headers = dict(scope.get("headers") or [])
         supplied = headers.get(AUTH_HEADER_NAME, b"").decode("latin-1")
-        if not hmac.compare_digest(supplied, self.token):
+        tenant_id, _is_admin = opsgate_tenants.resolve_tenant_from_token(supplied)
+        if tenant_id is None and not hmac.compare_digest(supplied, self.token):
             response = JSONResponse({"error": f"unauthorized - missing or invalid {AUTH_HEADER_NAME.decode()} header"}, status_code=401)
             await response(scope, receive, send)
             return
-        await self.app(scope, receive, send)
+        reset_token = _current_tenant_id.set(tenant_id)
+        try:
+            await self.app(scope, receive, send)
+        finally:
+            _current_tenant_id.reset(reset_token)
 
 
 def _load_dotenv_if_present():

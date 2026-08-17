@@ -7,7 +7,8 @@ separate from prompt compilation, reports, or command dispatch.
 import re
 
 import opsgate_lexer
-from opsgate_profiles import active_profile, read_json
+import opsgate_tenants
+from opsgate_profiles import read_json
 
 
 def score_signals(text, signals):
@@ -38,10 +39,10 @@ def unique(items):
     return out
 
 
-def route_request(request):
+def route_request(request, tenant_id=None):
     routing = read_json("manifests/routing.manifest.json")
     gates = read_json("manifests/capability-gates.json")
-    profile = active_profile(request)
+    tenant_id = tenant_id or opsgate_tenants.LOCAL_DEV_TENANT_ID
     text = " ".join(
         str(item or "")
         for item in [
@@ -88,13 +89,13 @@ def route_request(request):
         if capability != (replit or {}).get("capability") and capability in gates and auth.get("authorized") is False:
             missing_authority.extend(gates[capability].get("requires", []))
 
-    profile_record = read_json("manifests/profiles.json").get("profiles", {}).get(profile, {})
+    profile_record = opsgate_tenants.get_profile(tenant_id) or {}
     result = {
         "request_id": request.get("id"),
-        "profile": profile,
-        # frontend_root/backend_root are per-profile data, not universal facts - resolved here
+        "profile": tenant_id,
+        # frontend_root/backend_root are per-tenant data, not universal facts - resolved here
         # so any caller (a compiled prompt, an MCP tool response, a human) can see this
-        # request's actual write roots without hardcoding a specific project's paths.
+        # request's actual write roots without hardcoding a specific tenant's paths.
         "profile_roots": {"frontend_root": profile_record.get("frontend_root"), "backend_root": profile_record.get("backend_root")},
         "deliverable": artifact.get("deliverable"),
         "artifact_mode": artifact.get("mode"),
@@ -110,10 +111,10 @@ def route_request(request):
     }
     if replit:
         capability = replit.get("capability") or next(iter(authorizations.keys()), None) or "ordinary_application_change"
-        # The active profile's own business-facts doc (e.g. ai/metco.md for the metco profile) is
-        # prepended here rather than hardcoded into every route in opsgate_contracts.py, so a new
-        # profile with no business_file of its own (generic-replit) does not get told to read a
-        # different project's business rules, and a future profile only needs to set one field.
+        # The active tenant's own business-facts doc is prepended here rather than hardcoded into
+        # every route in opsgate_contracts.py, so a tenant with no business_file of its own does
+        # not get told to read a different tenant's business rules, and a new tenant only needs
+        # to set one field.
         business_file = profile_record.get("business_file")
         full_references = ["replit.md", *([business_file] if business_file else []), *(replit.get("references") or [])]
         result.update(

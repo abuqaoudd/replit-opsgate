@@ -1,4 +1,4 @@
-# Generated fixtures (Replit OpsGate). Edit this file instead of standalone JSON fixtures.
+# Generated fixtures (OpsGate). Edit this file instead of standalone JSON fixtures.
 
 ROUTING_FIXTURES = [{'path': 'fixtures/routing/business-request.json',
   'data': {'request': {'id': 'REQ-FIXTURE-BUSINESS-001',

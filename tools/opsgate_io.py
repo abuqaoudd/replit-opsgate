@@ -87,9 +87,9 @@ def fixture_data(path):
         return copy.deepcopy(opsgate_fixtures.READY_PHASED_STATE)
     if normalized in ["reports:parsed-sample-report", "parsed-sample-report"] or normalized.endswith("fixtures/reports/parsed-sample-report.json"):
         return copy.deepcopy(opsgate_fixtures.PARSED_SAMPLE_REPORT)
-    if normalized in ["gold:bounded-frontend-request", "bounded-frontend-request"] or normalized.endswith("canonical/examples/gold-standard/bounded-frontend-request.json"):
+    if normalized in ["gold:bounded-frontend-request", "bounded-frontend-request"]:
         return copy.deepcopy(opsgate_fixtures.GOLD_STANDARD_BOUNDED_FRONTEND_REQUEST)
-    if normalized in ["gold:phased-migration-request", "phased-migration-request"] or normalized.endswith("canonical/examples/gold-standard/phased-migration-request.json"):
+    if normalized in ["gold:phased-migration-request", "phased-migration-request"]:
         return copy.deepcopy(opsgate_fixtures.GOLD_STANDARD_PHASED_MIGRATION_REQUEST)
     return None
 

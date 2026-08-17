@@ -1,6 +1,7 @@
 tools/__pycache__/
 .DS_Store
 runs/
+tenants/
 .env
 .venv/
 __pycache__/

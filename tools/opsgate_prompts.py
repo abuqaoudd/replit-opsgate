@@ -4,7 +4,6 @@ Split out of opsgate.py (relocation, not a rewrite). Everything here builds the 
 markdown prompt text handed to an implementing agent - the Mandatory HITL Gate block, the
 Per-Action Gate line, discovery steps, and the per-deliverable artifact prompt bodies.
 """
-from opsgate_profiles import protected_paths_for
 
 
 def as_list(items, fallback="None specified"):
@@ -132,7 +131,9 @@ def context_block(request):
 {as_list(request.get("must_not_change"))}"""
 
 
-def compile_replit_prompt(request, route):
+def compile_replit_prompt(request, route, protected_paths):
+    """`protected_paths` is always the caller's own resolved tenant's paths (see
+    opsgate.compile_prompt_text) - never another tenant's, and never a different profile's."""
     phase_line = (
         "Use phased execution. Produce a phase plan and execute only the earliest authorized incomplete phase."
         if route.get("execution_shape") == "phased"
@@ -179,7 +180,7 @@ Use each object's Responsibility, Inputs, Must Not, Workflow, and Output Evidenc
 |---|---|
 | Write | {", ".join(scope.get("write_paths") or []) or "No write paths authorized"} |
 | Minimum read-only | {", ".join(scope.get("read_paths") or []) or "Only direct owners, callers, and tests needed for the task"} |
-| Never access | {", ".join(protected_paths_for(request).get("never_access", [])) or "No never_access paths configured for the active profile"}, resolved aliases, protected generated or production systems |
+| Never access | {", ".join(protected_paths.get("never_access", [])) or "No never_access paths configured for the active profile"}, resolved aliases, protected generated or production systems |
 
 Must remain unchanged:
 

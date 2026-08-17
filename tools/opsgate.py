@@ -1,31 +1,42 @@
 #!/usr/bin/env python3
 """CLI command implementations and dispatcher.
 
-This used to be a single ~1800-line file mixing routing, prompt-template generation, schema
-validation, profile resolution, packaging, and self-testing together. It's now split into
-focused sibling modules (opsgate_profiles, opsgate_io, opsgate_routing, opsgate_prompts,
-opsgate_validation, opsgate_packaging, opsgate_selftest) - this file is what's left once those
-concerns move out: the actual cmd_* command handlers (each one thin, orchestrating calls into
-the modules above) plus the COMMANDS dispatch table this file's own CLI entrypoint (`python3
-tools/opsgate.py <command> [args...]`) and mcp-server/opsgate_mcp_server.py both rely on.
-Every function body below is unchanged from where it used to live - this is a structural
-reorganization, not a rewrite.
+Focused sibling modules (opsgate_tenants, opsgate_profiles, opsgate_io, opsgate_routing,
+opsgate_prompts, opsgate_validation, opsgate_selftest) own routing, prompt compilation, tenant
+resolution, and self-testing; this file is the cmd_* command handlers (each one thin,
+orchestrating calls into the modules above) plus the COMMANDS dispatch table this file's own
+CLI entrypoint (`python3 tools/opsgate.py <command> [args...]`) and
+mcp-server/opsgate_mcp_server.py both rely on.
 """
 import datetime as _dt
 import json
-import os
 import re
 import sys
 from pathlib import Path
 
 import opsgate_lexer
+import opsgate_tenants
 from opsgate_io import ROOT_DIR, load_data, load_request, print_json, usage, write_python_data
 from opsgate_prompts import compile_artifact_prompt, compile_replit_prompt
-from opsgate_profiles import active_profile, external_profile_config_path, matches_protected, protected_paths_for, read_json
+from opsgate_profiles import matches_protected, read_json
 from opsgate_routing import route_request, unique
 from opsgate_validation import REQUIRED_GATE_ROWS, extract_section, is_placeholder, parse_markdown_table, validate_value
-from opsgate_packaging import cmd_audit_engine, cmd_build_distributions, cmd_build_replit_install, cmd_diff_upgrade, cmd_release_notes
 from opsgate_selftest import cmd_test_all, cmd_validate_engine
+
+
+def _extract_tenant_flag(argv):
+    """Pulls a leading/trailing `--tenant <id>` flag out of argv - e.g. `python3
+    tools/opsgate.py show-profile --tenant acme`. Defaults to opsgate_tenants.LOCAL_DEV_TENANT_ID
+    when omitted, so the bare CLI has a safe, always-available identity with no setup required.
+    Returns (tenant_id, remaining_positional_argv)."""
+    if "--tenant" not in argv:
+        return opsgate_tenants.LOCAL_DEV_TENANT_ID, argv
+    index = argv.index("--tenant")
+    if index + 1 >= len(argv):
+        usage("--tenant requires a value, e.g. --tenant acme")
+    tenant_id = argv[index + 1]
+    remaining = argv[:index] + argv[index + 2:]
+    return tenant_id, remaining
 
 
 def cmd_route_request(argv):
@@ -34,10 +45,7 @@ def cmd_route_request(argv):
     print_json(route_request(load_request(argv[0])))
 
 
-def cmd_check_capabilities(argv):
-    if not argv:
-        usage("Usage: python3 tools/opsgate.py check-capabilities <request.json>")
-    request = load_request(argv[0])
+def check_capabilities_result(request):
     route = route_request(request)
     gates = read_json("manifests/capability-gates.json")
     missing = []
@@ -50,64 +58,65 @@ def cmd_check_capabilities(argv):
         auth = (request.get("authorizations") or {}).get(capability) or {}
         if auth.get("authorized") is not True and gates[capability].get("default") == "blocked":
             missing.append({"capability": capability, "required": gates[capability].get("requires", [])})
-    result = {"can_proceed": len(missing) == 0, "route_capability": route.get("capability"), "missing": missing}
+    return {"can_proceed": len(missing) == 0, "route_capability": route.get("capability"), "missing": missing}
+
+
+def cmd_check_capabilities(argv):
+    if not argv:
+        usage("Usage: python3 tools/opsgate.py check-capabilities <request.json>")
+    result = check_capabilities_result(load_request(argv[0]))
     print_json(result)
     if not result["can_proceed"]:
         raise SystemExit(1)
 
 
+def show_profile_result(request, tenant_id=None):
+    """Resolve the caller's tenant profile in full - name, roots, and protected paths. `request`
+    is accepted for call-site symmetry with the other *_result functions but is otherwise
+    unused - every field that used to come from it (an explicit "profile" field) is now resolved
+    by tenant identity instead. `tenant_id` defaults to opsgate_tenants.LOCAL_DEV_TENANT_ID."""
+    tenant_id = tenant_id or opsgate_tenants.LOCAL_DEV_TENANT_ID
+    profile_record = opsgate_tenants.get_profile(tenant_id)
+    return {
+        "resolved_profile": tenant_id,
+        "profile_record": profile_record or {},
+        "protected_paths": opsgate_tenants.protected_paths_for_tenant(tenant_id) or {},
+    }
+
+
 def cmd_show_profile(argv):
-    """Print the resolved active profile in full - name, roots, and protected paths - with no
-    request file required. Exists so a human or an agent can answer "what project am I actually
-    configured for right now" in one command instead of reading OPSGATE_PROFILE, profiles.json,
-    and protected-paths.json by hand. Accepts an optional request.json argument only to honor an
-    explicit "profile" field on it; every other request field is ignored."""
+    """Print the resolved tenant profile - see show_profile_result() for the real logic.
+    Defaults to opsgate_tenants.LOCAL_DEV_TENANT_ID; pass --tenant <id> for any other tenant."""
+    tenant_id, argv = _extract_tenant_flag(argv)
     request = load_request(argv[0]) if argv else {}
-    profile = active_profile(request)
-    profiles = read_json("manifests/profiles.json").get("profiles", {})
-    external_path = external_profile_config_path()
-    print_json(
-        {
-            "resolved_profile": profile,
-            "resolved_from": (
-                "OPSGATE_PROFILE env var"
-                if os.environ.get("OPSGATE_PROFILE") in profiles
-                else "METCO_PROFILE env var (legacy name)"
-                if os.environ.get("METCO_PROFILE") in profiles
-                else "request.profile field"
-                if request.get("profile") in profiles
-                else "manifests/profiles.json default_profile"
-            ),
-            "external_profile_config": str(external_path) if external_path else None,
-            "profile_record": profiles.get(profile, {}),
-            "protected_paths": protected_paths_for(request),
-        }
-    )
+    print_json(show_profile_result(request, tenant_id=tenant_id))
 
 
-def cmd_check_paths(argv):
-    if not argv:
-        usage("Usage: python3 tools/opsgate.py check-paths <request.json>")
-    request = load_request(argv[0])
-    protected_paths = protected_paths_for(request)
+def check_paths_result(request, tenant_id=None):
+    protected_paths = opsgate_tenants.protected_paths_for_tenant(tenant_id or opsgate_tenants.LOCAL_DEV_TENANT_ID)
     scope = request.get("scope") or {}
     all_paths = [*(scope.get("write_paths") or []), *(scope.get("read_paths") or [])]
     violations = []
     for candidate in all_paths:
-        for protected_pattern in protected_paths.get("never_access", []):
+        for protected_pattern in (protected_paths or {}).get("never_access", []):
             if matches_protected(candidate, protected_pattern):
                 violations.append({"path": candidate, "protected_pattern": protected_pattern})
-    result = {"can_proceed": len(violations) == 0, "checked_paths": all_paths, "violations": violations}
+    return {"can_proceed": len(violations) == 0, "checked_paths": all_paths, "violations": violations}
+
+
+def cmd_check_paths(argv):
+    tenant_id, argv = _extract_tenant_flag(argv)
+    if not argv:
+        usage("Usage: python3 tools/opsgate.py check-paths <request.json> [--tenant <id>]")
+    result = check_paths_result(load_request(argv[0]), tenant_id=tenant_id)
     print_json(result)
     if not result["can_proceed"]:
         raise SystemExit(1)
 
 
-def cmd_preflight(argv):
-    if not argv:
-        usage("Usage: python3 tools/opsgate.py preflight <request.json>")
-    request = load_request(argv[0])
-    route = route_request(request)
+def preflight_result(request, tenant_id=None):
+    tenant_id = tenant_id or opsgate_tenants.LOCAL_DEV_TENANT_ID
+    route = route_request(request, tenant_id=tenant_id)
     gates = read_json("manifests/gates.json")
     failed_gates = []
     evidence = []
@@ -120,10 +129,11 @@ def cmd_preflight(argv):
         evidence.append("read_scope_default: direct owners, callers, and tests")
     if route.get("blocked"):
         failed_gates.append("capability_gate: missing_authority")
-    # Reuse matches_protected() (the exact same check cmd_check_paths uses) rather than a
-    # second, independently-drifting inline implementation - preflight and check-paths must
-    # agree on every path, not just usually agree.
-    protected_patterns = protected_paths_for(request).get("never_access", [])
+    # Reuse matches_protected() (the exact same check cmd_check_paths/check_paths_result uses)
+    # rather than a second, independently-drifting inline implementation - preflight and
+    # check-paths must agree on every path, not just usually agree.
+    protected_paths = opsgate_tenants.protected_paths_for_tenant(tenant_id)
+    protected_patterns = (protected_paths or {}).get("never_access", [])
     for candidate in [*write_paths, *read_paths]:
         for pattern in protected_patterns:
             if matches_protected(candidate, pattern):
@@ -136,7 +146,7 @@ def cmd_preflight(argv):
     # decision-required ceremony, which is reserved for the three genuine ambiguity cases
     # (unknown next step, tied valid options, self-made scope-expanding decision) that can only
     # be discovered during actual work, not from a request file before anything has been touched.
-    result = {
+    return {
         "request_id": request.get("id"),
         "route": route,
         "gates_version": gates.get("version"),
@@ -146,24 +156,37 @@ def cmd_preflight(argv):
         "blocked_gate_kind": "deterministic" if failed_gates else None,
         "evidence": evidence,
     }
+
+
+def cmd_preflight(argv):
+    tenant_id, argv = _extract_tenant_flag(argv)
+    if not argv:
+        usage("Usage: python3 tools/opsgate.py preflight <request.json> [--tenant <id>]")
+    result = preflight_result(load_request(argv[0]), tenant_id=tenant_id)
     print_json(result)
     if not result["can_proceed"]:
         raise SystemExit(1)
 
 
+def compile_prompt_text(request, tenant_id=None):
+    tenant_id = tenant_id or opsgate_tenants.LOCAL_DEV_TENANT_ID
+    route = route_request(request, tenant_id=tenant_id)
+    if route.get("deliverable") == "replit_prompt":
+        protected_paths = opsgate_tenants.protected_paths_for_tenant(tenant_id)
+        prompt = compile_replit_prompt(request, route, protected_paths=protected_paths)
+    else:
+        prompt = compile_artifact_prompt(request, route)
+    return prompt.strip()
+
+
 def cmd_compile_prompt(argv):
+    tenant_id, argv = _extract_tenant_flag(argv)
     if not argv:
-        usage("Usage: python3 tools/opsgate.py compile-prompt <request.json>")
-    request = load_request(argv[0])
-    route = route_request(request)
-    prompt = compile_replit_prompt(request, route) if route.get("deliverable") == "replit_prompt" else compile_artifact_prompt(request, route)
-    print(prompt.strip())
+        usage("Usage: python3 tools/opsgate.py compile-prompt <request.json> [--tenant <id>]")
+    print(compile_prompt_text(load_request(argv[0]), tenant_id=tenant_id))
 
 
-def cmd_init_state(argv):
-    if not argv:
-        usage("Usage: python3 tools/opsgate.py init-state <request.json>")
-    request = load_request(argv[0])
+def init_state_result(request):
     route = route_request(request)
     state = {
         "request_id": request.get("id"),
@@ -199,13 +222,16 @@ def cmd_init_state(argv):
                 "rollback_boundary": "Current phase changed files only",
             },
         ]
-    print_json(state)
+    return state
 
 
-def cmd_parse_report(argv):
+def cmd_init_state(argv):
     if not argv:
-        usage("Usage: python3 tools/opsgate.py parse-report <report.md>")
-    text = Path(argv[0]).resolve().read_text(encoding="utf-8")
+        usage("Usage: python3 tools/opsgate.py init-state <request.json>")
+    print_json(init_state_result(load_request(argv[0])))
+
+
+def parse_report_result(text):
     lines = re.split(r"\r?\n", text)
 
     def collect_section(patterns):
@@ -232,7 +258,7 @@ def cmd_parse_report(argv):
             files.append(match.group(1).replace("`", "").strip())
     hitl = [line.strip() for line in lines if re.search(r"HITL-[A-Za-z0-9-]+", line)]
     risk = collect_section([r"^#+\s*residual risk", r"^#+\s*remaining risk"])
-    parsed = {
+    return {
         "outcome": (collect_section([r"^#+\s*outcome", r"^#+\s*summary"]) or ["Not detected"])[0],
         "acceptance_status": (collect_section([r"^#+\s*acceptance"]) or ["Not detected"])[0],
         "files_changed": unique(files),
@@ -241,13 +267,15 @@ def cmd_parse_report(argv):
         "blockers": collect_section([r"^#+\s*blockers?", r"^#+\s*limitations?"]),
         "residual_risk": risk or ["Not detected"],
     }
-    print_json(parsed)
 
 
-def cmd_lint_report(argv):
+def cmd_parse_report(argv):
     if not argv:
-        usage("Usage: python3 tools/opsgate.py lint-report <report.md>")
-    text = Path(argv[0]).resolve().read_text(encoding="utf-8")
+        usage("Usage: python3 tools/opsgate.py parse-report <report.md>")
+    print_json(parse_report_result(Path(argv[0]).resolve().read_text(encoding="utf-8")))
+
+
+def lint_report_result(text):
     # Sourced from GATES['gates']['final_report_gate']['required_sections'] rather than a
     # second hardcoded copy - the two lists were already identical, just independently
     # maintained, which is exactly the kind of declared-vs-enforced drift risk this fixes.
@@ -284,7 +312,7 @@ def cmd_lint_report(argv):
         blockers.append("two valid choices require recorded HITL decision ID")
     if answer_for("Would proceeding require inventing a business rule, permission rule, data rule, or API contract?") == "YES" and not re.search(r"\bHITL-[A-Za-z0-9-]+(-P[0-9]+)?-Q[0-9]+\b", text):
         blockers.append("invented rule/contract requires recorded HITL decision ID")
-    result = {
+    return {
         "pass": not missing and has_check_label and has_gate_header and not missing_gate_rows and not invalid_answers and not weak_evidence and not blockers,
         "missing": missing,
         "has_check_label": has_check_label,
@@ -294,16 +322,18 @@ def cmd_lint_report(argv):
         "weak_gate_evidence": weak_evidence,
         "blockers": blockers,
     }
+
+
+def cmd_lint_report(argv):
+    if not argv:
+        usage("Usage: python3 tools/opsgate.py lint-report <report.md>")
+    result = lint_report_result(Path(argv[0]).resolve().read_text(encoding="utf-8"))
     print_json(result)
     if not result["pass"]:
         raise SystemExit(1)
 
 
-def cmd_lint_prompt(argv):
-    if not argv:
-        usage("Usage: python3 tools/opsgate.py lint-prompt <prompt.md>")
-    text = Path(argv[0]).resolve().read_text(encoding="utf-8")
-
+def lint_prompt_result(text):
     # Every real Replit prompt in this engine must state these six concepts, but the exact
     # wording differs by source: compile-prompt.py's own output and the compact "gate stub"
     # fixture use literal headings ("## Scope", "## Mandatory HITL Gate", "## Final Report"),
@@ -339,13 +369,19 @@ def cmd_lint_prompt(argv):
             missing.append("DECIDE reply format for the HITL decision")
 
     has_resume_language = re.search(r"\b(paused|resume)\b", text, re.I) is not None
-    result = {
+    return {
         "pass": not missing and has_resume_language,
         "missing": missing,
         "emits_hitl_decision": emits_hitl_decision,
         "has_labeled_options": has_labeled_options,
         "has_resume_language": has_resume_language,
     }
+
+
+def cmd_lint_prompt(argv):
+    if not argv:
+        usage("Usage: python3 tools/opsgate.py lint-prompt <prompt.md>")
+    result = lint_prompt_result(Path(argv[0]).resolve().read_text(encoding="utf-8"))
     print_json(result)
     if not result["pass"]:
         raise SystemExit(1)
@@ -367,10 +403,7 @@ _INTAKE_DELIVERABLE_SIGNALS = [
 ]
 
 
-def cmd_intake_request(argv):
-    text = " ".join(argv)
-    if not text:
-        usage('Usage: python3 tools/opsgate.py intake-request "<plain language request>"')
+def intake_request_result(text):
     scored = [(deliverable, opsgate_lexer.lexical_score(text, signals)[0]) for deliverable, signals in _INTAKE_DELIVERABLE_SIGNALS]
     best_score, tied = opsgate_lexer.top_candidates(scored)
     if best_score <= 0:
@@ -401,28 +434,35 @@ def cmd_intake_request(argv):
         request["authorizations"]["package_config_environment_deployment"] = {"authorized": False, "evidence": []}
     if any(opsgate_lexer.lexical_contains(text, word) for word in ["delete", "destructive", "cleanup", "remove"]):
         request["authorizations"]["contract_change_or_destructive_cleanup"] = {"authorized": False, "evidence": []}
-    print_json(request)
+    return request
+
+
+def cmd_intake_request(argv):
+    text = " ".join(argv)
+    if not text:
+        usage('Usage: python3 tools/opsgate.py intake-request "<plain language request>"')
+    print_json(intake_request_result(text))
 
 
 def cmd_next_phase_prompt(argv):
     if len(argv) < 2:
         usage("Usage: python3 tools/opsgate.py next-phase-prompt <run-state.json> <parsed-report.json>")
-    state = load_data(argv[0])
-    report = load_data(argv[1])
+    print(next_phase_prompt_text(load_data(argv[0]), load_data(argv[1])))
+
+
+def next_phase_prompt_text(state, report):
     next_phase = next((phase for phase in state.get("phases", []) if phase.get("status") in ["planned", "ready"]), None)
     if not next_phase:
-        print("# No Next Phase\n\nNo planned or ready phase was found in the supplied run state.")
-        return
+        return "# No Next Phase\n\nNo planned or ready phase was found in the supplied run state."
     failed = [check for check in report.get("checks", []) if check.get("status") == "FAILED"]
     blockers = report.get("blockers") or []
     if failed or blockers:
         lines = [*(f"- FAILED: {check.get('text')}" for check in failed), *[f"- {item}" for item in blockers]]
-        print(f"# Phase Blocked\n\nDo not generate the next implementation prompt yet.\n\n## Blocking Evidence\n\n{chr(10).join(lines)}")
-        return
+        return f"# Phase Blocked\n\nDo not generate the next implementation prompt yet.\n\n## Blocking Evidence\n\n{chr(10).join(lines)}"
     not_run = [check for check in report.get("checks", []) if check.get("status") == "NOT RUN"]
     passed_count = len([check for check in report.get("checks", []) if check.get("status") == "PASSED"])
     verification = "\n".join(f"- {item}" for item in next_phase.get("verification_gate", [])) or "- Verify the phase outcome with risk-based checks."
-    print(f"""# Prompt for {next_phase.get("id")}
+    return f"""# Prompt for {next_phase.get("id")}
 
 Deliver only: **{next_phase.get("outcome")}**
 
@@ -444,16 +484,13 @@ Use the previous phase report as evidence, not authority.
 
 {verification}
 
-Resume from the next incomplete phase. Do not repeat completed discovery unless scoped drift is detected. Label checks PASSED, FAILED, or NOT RUN.""")
+Resume from the next incomplete phase. Do not repeat completed discovery unless scoped drift is detected. Label checks PASSED, FAILED, or NOT RUN."""
 
 
 _UNSAFE_RUN_ID_CHARS = re.compile(r"[^A-Za-z0-9_-]")
 
 
-def cmd_init_run(argv):
-    if not argv:
-        usage("Usage: python3 tools/opsgate.py init-run <request.json>")
-    request = load_request(argv[0])
+def init_run_result(request):
     route = route_request(request)
     run_id = request.get("id") or f"REQ-{int(_dt.datetime.now().timestamp() * 1000)}"
     # request["id"] is caller-controlled (including over the MCP server) and used as a runs/
@@ -469,18 +506,28 @@ def cmd_init_run(argv):
     result = {"run_id": run_id, "run_dir": str(run_dir.relative_to(ROOT_DIR))}
     if safe_run_id != str(run_id):
         result["run_dir_id_sanitized"] = True
-    print_json(result)
+    return result
+
+
+def cmd_init_run(argv):
+    if not argv:
+        usage("Usage: python3 tools/opsgate.py init-run <request.json>")
+    print_json(init_run_result(load_request(argv[0])))
+
+
+def record_decision_result(hitl_id, answer):
+    entry = {"recorded_at": _dt.datetime.now(_dt.timezone.utc).isoformat().replace("+00:00", "Z"), "id": hitl_id, "answer": answer}
+    decisions = ROOT_DIR / "runs" / "decisions.pylog"
+    decisions.parent.mkdir(parents=True, exist_ok=True)
+    with decisions.open("a", encoding="utf-8") as handle:
+        handle.write(repr(entry) + "\n")
+    return entry
 
 
 def cmd_record_decision(argv):
     if len(argv) < 2:
         usage("Usage: python3 tools/opsgate.py record-decision <HITL-ID> <answer and exact scope>")
-    entry = {"recorded_at": _dt.datetime.now(_dt.timezone.utc).isoformat().replace("+00:00", "Z"), "id": argv[0], "answer": " ".join(argv[1:])}
-    decisions = ROOT_DIR / "runs" / "decisions.pylog"
-    decisions.parent.mkdir(parents=True, exist_ok=True)
-    with decisions.open("a", encoding="utf-8") as handle:
-        handle.write(repr(entry) + "\n")
-    print_json(entry)
+    print_json(record_decision_result(argv[0], " ".join(argv[1:])))
 
 
 def cmd_validate_json(argv):
@@ -497,13 +544,9 @@ def cmd_validate_json(argv):
 
 
 COMMANDS = {
-    "audit-engine": cmd_audit_engine,
-    "build-distributions": cmd_build_distributions,
-    "build-replit-install": cmd_build_replit_install,
     "check-capabilities": cmd_check_capabilities,
     "check-paths": cmd_check_paths,
     "compile-prompt": cmd_compile_prompt,
-    "diff-upgrade": cmd_diff_upgrade,
     "init-run": cmd_init_run,
     "init-state": cmd_init_state,
     "intake-request": cmd_intake_request,
@@ -513,7 +556,6 @@ COMMANDS = {
     "parse-report": cmd_parse_report,
     "preflight": cmd_preflight,
     "record-decision": cmd_record_decision,
-    "release-notes": cmd_release_notes,
     "route-request": cmd_route_request,
     "show-profile": cmd_show_profile,
     "test-all": cmd_test_all,

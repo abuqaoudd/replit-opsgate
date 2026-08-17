@@ -1,42 +1,33 @@
-# Generated engine contracts (Replit OpsGate). Edit this file instead of standalone JSON manifests.
+# Generated engine contracts (OpsGate). Edit this file instead of standalone JSON manifests.
 
-ENGINE_MANIFEST = {'name': 'replit-opsgate',
- 'version': '6.0.34',
- 'release_date': '2026-08-16',
- 'source_version': '6',
- 'purpose': 'Canonical prompt, skill, and Replit engine foundation with object-oriented instruction '
-            'contracts, plus a real MCP server (mcp-server/) exposing the same gates as live tool calls.',
- 'canonical_root': 'canonical',
- 'generated_roots': ['dist/claude', 'dist/replit'],
+ENGINE_MANIFEST = {'name': 'opsgate',
+ 'version': '7.0.0',
+ 'release_date': '2026-08-17',
+ 'source_version': '7',
+ 'purpose': 'Governance engine for AI coding agents working on Replit projects: canonical prompt/skill '
+            'content with object-oriented instruction contracts, served through a hosted, multi-tenant '
+            'MCP server (mcp-server/) exposing gates as live tool calls.',
+ 'content_root': 'content',
  'commands': {'validate': 'python3 tools/opsgate.py validate-engine',
               'test_all': 'python3 tools/opsgate.py test-all',
-              'build': 'python3 tools/opsgate.py build-distributions',
               'route': 'python3 tools/opsgate.py route-request <request.json>',
               'compile': 'python3 tools/opsgate.py compile-prompt <request.json>',
               'init_state': 'python3 tools/opsgate.py init-state <request.json>',
               'parse_report': 'python3 tools/opsgate.py parse-report <report.md>',
-              'diff_upgrade': 'python3 tools/opsgate.py diff-upgrade <old-engine-root> [new-engine-root]',
               'intake': 'python3 tools/opsgate.py intake-request "<plain language request>"',
               'next_phase': 'python3 tools/opsgate.py next-phase-prompt <run-state.json> <parsed-report.json>',
-              'replit_install': 'python3 tools/opsgate.py build-replit-install',
-              'release_notes': 'python3 tools/opsgate.py release-notes <old-engine-root>',
               'preflight': 'python3 tools/opsgate.py preflight <request.json>',
               'check_paths': 'python3 tools/opsgate.py check-paths <request.json>',
               'check_capabilities': 'python3 tools/opsgate.py check-capabilities <request.json>',
               'lint_prompt': 'python3 tools/opsgate.py lint-prompt <prompt.md>',
               'lint_report': 'python3 tools/opsgate.py lint-report <report.md>',
-              'audit_engine': 'python3 tools/opsgate.py audit-engine [project-root]',
               'init_run': 'python3 tools/opsgate.py init-run <request.json>',
               'record_decision': 'python3 tools/opsgate.py record-decision <HITL-ID> <answer and exact scope>',
-              'show_profile': 'python3 tools/opsgate.py show-profile [request.json]',
-              'validate_json': 'python3 tools/opsgate.py validate-json <schema-contract> <data-file>',
-              'init_profile': 'python3 tools/init-profile.py --profile <name> --target-root <outer-project-root> --frontend-root <path> [--backend-root <path>] [--extra-never-access <glob>]...',
-              'apply_setup': 'python3 tools/apply-setup.py --template PROJECT_SETUP.md --target-root . (the primary onboarding path - see replit.md First-run setup check)'},
- 'release_acceptance': ['canonical distribution mappings pass',
-                        'Replit skill metadata is valid',
+              'show_profile': 'python3 tools/opsgate.py show-profile [request.json] [--tenant <id>]',
+              'validate_json': 'python3 tools/opsgate.py validate-json <schema-contract> <data-file>'},
+ 'release_acceptance': ['Replit skill metadata is valid',
                         'protected path rules remain present',
                         'HITL is limited to three cases',
-                        'generated archives pass integrity checks',
                         'routing fixtures produce expected outcomes',
                         'canonical AI instruction objects expose responsibility, activation, inputs, boundaries, '
                         'workflow, and output evidence']}
@@ -211,11 +202,11 @@ CAPABILITY_GATES = {'ordinary_application_change': {'default': 'allowed_when_sco
                                            'requires': ['exact_explicit_authorization',
                                                         'task_specific_safety_prerequisites']}}
 
-# Protections every profile gets regardless of which specific project the engine is running
-# against - these are universal engineering risks (VCS internals, secrets files, dependency
-# trees, CI, agent memory), not anything specific to the METCO project. A brand-new Replit
-# project that only sets OPSGATE_PROFILE=generic-replit still gets this baseline for free instead
-# of an empty or missing protected-path list.
+# Protections every tenant gets regardless of its own frontend/backend roots - universal
+# engineering risks (VCS internals, secrets files, dependency trees, CI, agent memory), not
+# anything specific to one project. Every tenant (see opsgate_tenants.protected_paths_for_tenant())
+# gets this baseline merged in, so a brand-new tenant with no extra_never_access still gets
+# real protection instead of an empty or missing protected-path list.
 _UNIVERSAL_NEVER_ACCESS = ['.git/**', '.env', '.env.*', 'node_modules/**', '.github/workflows/**', '.claude/**', '.agents/memory/**']
 # Locked-by-default categories are already project-agnostic (packages, lockfiles, schema,
 # secrets, etc. are universal engineering categories, not METCO-specific paths), so both
@@ -237,17 +228,6 @@ _UNIVERSAL_LOCKED_BY_DEFAULT = ['packages',
                                '.agents/memory/**',
                                'instructions',
                                'unrelated_docs']
-
-PROTECTED_PATHS = {'profiles': {'metco': {'normal_write_paths': ['artifacts/metco/src/**', 'artifacts/api-server/src/**'],
-                        # metco-api/** and pipeline/** are this project's own protected trees -
-                        # kept only on the metco profile, not the universal baseline, since they
-                        # would be meaningless (and misleadingly specific) noise on any other
-                        # project that adopts this engine via the generic-replit profile.
-                        'never_access': [*_UNIVERSAL_NEVER_ACCESS, 'metco-api/**', 'pipeline/**', '**/metco-api/**', '**/pipeline/**'],
-                        'locked_by_default': list(_UNIVERSAL_LOCKED_BY_DEFAULT)},
-                    'generic-replit': {'normal_write_paths': [],
-                        'never_access': list(_UNIVERSAL_NEVER_ACCESS),
-                        'locked_by_default': list(_UNIVERSAL_LOCKED_BY_DEFAULT)}}}
 
 HITL_SCHEMA = {'$schema': 'https://json-schema.org/draft/2020-12/schema',
  'title': 'HITL Decision',
@@ -307,71 +287,7 @@ REQUEST_SCHEMA = {'$schema': 'https://json-schema.org/draft/2020-12/schema',
                                                  'tests': {'type': 'array', 'items': {'type': 'string'}}}},
                 'reference_scope': {'type': 'string',
                                     'enum': ['full', 'minimal'],
-                                    'description': 'Defaults to "full" (unchanged behavior). "minimal" trims required_references down to only the ones whose topic keywords appear in the request text/scope, always keeping replit.md and the active profile\'s business_file (see PROFILES[profile]["business_file"]), if it has one.'},
-                'profile': {'type': 'string',
-                           'description': 'Which PROFILES entry (protected paths, write roots) governs this request. Defaults to the OPSGATE_PROFILE environment variable if set, then manifests/profiles.json default_profile ("generic-replit"), then "generic-replit" if neither resolves to a known profile. Set this (or OPSGATE_PROFILE) to "metco" when this request is for the one project the engine was originally built for.'}}}
-
-DISTRIBUTIONS = {'claude': {'root': 'dist/claude',
-             'copies': [['canonical/CLAUDE_PROJECT_INSTRUCTIONS.md', 'dist/claude/CLAUDE_PROJECT_INSTRUCTIONS.md'],
-                        ['canonical/templates', 'dist/claude/templates'],
-                        ['canonical/references', 'dist/claude/references'],
-                        ['canonical/specifications', 'dist/claude/specifications'],
-                        ['canonical/examples', 'dist/claude/examples']],
-             'skill_packages': ['project-prompt-router', 'replit-task-builder', 'engine-maintainer', 'mcp-integration'],
-             # Sources copied into dist/claude/claude-skills/<target>. Shared by build-distributions.py
-             # (which writes these) and validate-engine.py (which checks canonical/dist byte-identity),
-             # so this is the single source of truth for the skill-package reference copy map.
-             'skill_reference_mappings': [
-                 ['canonical/templates/REPLIT_PHASED_IMPLEMENTATION_TEMPLATE.md', 'replit-task-builder/references/phased-implementation-template.md'],
-                 ['canonical/references/replit.md', 'replit-task-builder/references/replit.md'],
-                 ['canonical/templates/PROMPT_REQUEST_FORM.md', 'replit-task-builder/references/request-form.md'],
-                 ['canonical/examples/BACKEND_SEEDING_PROMPT_EXAMPLE.md', 'replit-task-builder/references/example-backend-seeding.md'],
-                 ['canonical/templates/HITL_DECISION_TEMPLATE.md', 'replit-task-builder/references/hitl-decision-template.md'],
-                 ['canonical/specifications/REPLIT_EXECUTION_SPEC.md', 'replit-task-builder/references/replit-execution-spec.md'],
-                 ['canonical/specifications/SCENARIO_SKILL_CONTRACTS_SPEC.md', 'replit-task-builder/references/scenario-skill-contracts-spec.md'],
-                 ['canonical/specifications/ENGINE_FOUNDATION_SPEC.md', 'replit-task-builder/references/engine-foundation-spec.md'],
-                 ['canonical/specifications/OBJECT_ORIENTED_INSTRUCTIONS_SPEC.md', 'replit-task-builder/references/object-oriented-instructions-spec.md'],
-                 ['canonical/templates/REPLIT_TASK_TEMPLATE.md', 'replit-task-builder/references/task-template.md'],
-                 ['canonical/specifications/PROCESS_MODES_SPEC.md', 'replit-task-builder/references/process-modes-spec.md'],
-                 ['canonical/specifications/HITL_SPEC.md', 'replit-task-builder/references/hitl-spec.md'],
-                 ['canonical/references/ai', 'replit-task-builder/references/ai'],
-                 ['canonical/references/replit-skills', 'replit-task-builder/references/replit-skills'],
-                 ['canonical/examples/gold-standard/hitl-resume-example.md', 'replit-task-builder/references/hitl-resume-example.md'],
-                 ['canonical/examples/gold-standard/parseable-final-report-example.md', 'replit-task-builder/references/parseable-final-report-example.md'],
-                 ['canonical/templates/REPLIT_PHASED_IMPLEMENTATION_TEMPLATE.md', 'project-prompt-router/references/phased-implementation-template.md'],
-                 ['canonical/references/replit.md', 'project-prompt-router/references/replit.md'],
-                 ['canonical/templates/PROMPT_REQUEST_FORM.md', 'project-prompt-router/references/request-form.md'],
-                 ['canonical/templates/BUSINESS_FILE_PROMPT_TEMPLATE.md', 'project-prompt-router/references/business-file-template.md'],
-                 ['canonical/templates/CHANGE_IMPROVEMENT_PROMPT_TEMPLATE.md', 'project-prompt-router/references/change-improvement-template.md'],
-                 ['canonical/templates/TASK_BACKLOG_PROMPT_TEMPLATE.md', 'project-prompt-router/references/task-backlog-template.md'],
-                 ['canonical/templates/HITL_DECISION_TEMPLATE.md', 'project-prompt-router/references/hitl-decision-template.md'],
-                 ['canonical/specifications/SKILL_ROUTING_SPEC.md', 'project-prompt-router/references/routing-spec.md'],
-                 ['canonical/specifications/OBJECT_ORIENTED_INSTRUCTIONS_SPEC.md', 'project-prompt-router/references/object-oriented-instructions-spec.md'],
-                 ['canonical/templates/AUDIT_PROMPT_TEMPLATE.md', 'project-prompt-router/references/audit-template.md'],
-                 ['canonical/specifications/ARTIFACT_CONTRACTS_SPEC.md', 'project-prompt-router/references/artifact-contracts-spec.md'],
-                 ['canonical/templates/SPEC_FILE_PROMPT_TEMPLATE.md', 'project-prompt-router/references/spec-file-template.md'],
-                 ['canonical/templates/REPLIT_TASK_TEMPLATE.md', 'project-prompt-router/references/replit-task-template.md'],
-                 ['canonical/specifications/PROCESS_MODES_SPEC.md', 'project-prompt-router/references/process-modes-spec.md'],
-             ]},
- 'replit': {'root': 'dist/replit',
-            'copies': [['canonical/references/replit.md', 'dist/replit/replit.md'],
-                       ['canonical/references/ai', 'dist/replit/ai'],
-                       ['canonical/references/replit-skills', 'dist/replit/.agents/skills']]}}
-
-# default_profile is generic-replit, not metco: this engine is meant to be reused across
-# whichever Replit project a submodule of it gets dropped into, and METCO is one specific
-# project that happens to use it - not the engine's own identity. The one project that
-# actually is METCO must opt in explicitly (OPSGATE_PROFILE=metco, or a "profile" field on the
-# request) rather than every other adopting project needing to opt out.
-PROFILES = {'default_profile': 'generic-replit',
- 'profiles': {'metco': {'description': 'METCO Replit frontend and Replit-backend project profile. Select explicitly (OPSGATE_PROFILE=metco or request.profile) - it is no longer the default.',
-                        'business_file': 'ai/metco.md',
-                        'frontend_root': 'artifacts/metco/src',
-                        'backend_root': 'artifacts/api-server/src'},
-              'generic-replit': {'description': "Default profile for any Replit project this engine is dropped into. frontend_root/backend_root are left unset (None) rather than guessed, since assuming a wrong folder name silently is worse than admitting it is not yet configured - set them by adding a project-specific profile (see canonical/ENGINE_ADOPTION_GUIDE.md) once the project's real roots are known.",
-                                 'business_file': None,
-                                 'frontend_root': None,
-                                 'backend_root': None}}}
+                                    'description': 'Defaults to "full" (unchanged behavior). "minimal" trims required_references down to only the ones whose topic keywords appear in the request text/scope, always keeping replit.md and the resolved tenant\'s business_file, if it has one.'}}}
 
 RUN_STATE_SCHEMA = {'$schema': 'https://json-schema.org/draft/2020-12/schema',
  'title': 'Run State',
@@ -436,7 +352,7 @@ REPORT_SCHEMA = {'$schema': 'https://json-schema.org/draft/2020-12/schema',
                 'blockers': {'type': 'array', 'items': {'type': 'string'}},
                 'residual_risk': {'type': 'array', 'items': {'type': 'string'}}}}
 
-GATES = {'version': '6',
+GATES = {'version': '7',
  'required_before': ['edit', 'phase', 'final_report'],
  'gates': {'scope_gate': {'stop_if': ['missing_write_scope', 'missing_read_scope', 'owner_or_path_unknown']},
            'protected_path_gate': {'stop_if': ['protected_path_requested', 'path_may_resolve_to_protected_content']},
@@ -477,15 +393,9 @@ CONTRACTS = {
 
     'manifests/capability-gates.json': CAPABILITY_GATES,
 
-    'manifests/protected-paths.json': PROTECTED_PATHS,
-
     'manifests/hitl.schema.json': HITL_SCHEMA,
 
     'manifests/request.schema.json': REQUEST_SCHEMA,
-
-    'manifests/distributions.json': DISTRIBUTIONS,
-
-    'manifests/profiles.json': PROFILES,
 
     'manifests/run-state.schema.json': RUN_STATE_SCHEMA,
 
