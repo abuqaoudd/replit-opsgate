@@ -26,13 +26,13 @@ Before pausing:
 The three triggers in §1 apply at two grains, not one:
 
 - **Per-Action Gate**: run before every individual state-changing action — one edit, one destructive command, one move to the next workflow step. Lightweight: confirm only that none of the three triggers apply to this specific action, and state the result inline (`Gate: OK` or `Gate: BLOCKED`) before acting. Never batch several actions before checking, and never defer a blocked action to a later report.
-- **Mandatory HITL Gate**: run once before editing starts, once before each phase, and once before the final report. Heavier: an explicit 8-row evidence table (see `replit.md`).
+- **Mandatory HITL Gate**: run once before editing starts, once before each phase, and once before the final report. Heavier: an explicit 8-row evidence table (see the project's root instruction file, e.g. `replit.md`).
 
 The Per-Action Gate never substitutes for the Mandatory HITL Gate at the checkpoints where the table is required. A `BLOCKED` result from either tier triggers the same pause contract in §4 below. A final report must confirm the Per-Action Gate actually ran at each action taken, not only reconstruct plausible answers for it afterward.
 
 ## 4. Pause contract
 
-When a trigger applies, Replit MUST:
+When a trigger applies, the agent MUST:
 
 - stop the entire task before making the unresolved decision;
 - perform no further inspection, commands, edits, tests, planning, or independent work;
