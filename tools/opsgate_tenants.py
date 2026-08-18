@@ -22,7 +22,9 @@ does not itself leak usable credentials. An explicit tenant override exists only
 tokens, and is itself checked against the tenant registry (never trusted blindly), so a non-admin
 token can never address another tenant's profile by passing a different ID.
 """
+import contextlib
 import copy
+import fcntl
 import hashlib
 import hmac
 import json
@@ -66,7 +68,10 @@ def _load_registry():
     try:
         data = json.loads(REGISTRY_PATH.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
-        raise TenantError(f"tenant registry at {REGISTRY_PATH} is not valid JSON ({exc})") from exc
+        # Every tenant-resolving MCP tool surfaces an unhandled TenantError straight back to the
+        # caller as its error response - name the registry file, not this server's absolute
+        # filesystem path to it, which no caller has any legitimate use for.
+        raise TenantError(f"tenant registry ({REGISTRY_PATH.name}) is not valid JSON ({exc})") from exc
     data.setdefault("tenants", {})
     return data
 
@@ -74,6 +79,41 @@ def _load_registry():
 def _save_registry(data):
     REGISTRY_PATH.parent.mkdir(parents=True, exist_ok=True)
     REGISTRY_PATH.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    # Holds every tenant's absolute frontend/backend roots and every issued token's hash - keep
+    # both the file and its directory private to this user account. Set on every save (not just
+    # once by hand) so a fresh checkout or a deleted-and-recreated registry can't silently regress
+    # to the process umask's default (typically world/group-readable).
+    REGISTRY_PATH.parent.chmod(0o700)
+    REGISTRY_PATH.chmod(0o600)
+
+
+@contextlib.contextmanager
+def _locked_registry():
+    """Exclusive-locks tenants/registry.json.lock for one read-modify-write cycle, then loads
+    and yields the registry - every mutating function below (create/update/delete_profile,
+    issue/revoke_token) used to load, mutate, and save with no lock at all, so two
+    near-simultaneous writers (e.g. two issue_token() calls for different tenants landing close
+    together) could race and one write silently vanish (a lost update) on this plain JSON file.
+    Read-only callers (get_profile/list_profiles/resolve_tenant_from_token) still call
+    _load_registry() directly and never wait on this - only writers serialize against each
+    other. This only adds mutual exclusion around the existing load/mutate/save pattern; each
+    caller below still calls _save_registry(registry) itself, exactly where it did before, so
+    whether/when a save actually happens is unchanged (e.g. revoke_token() still only saves if
+    it actually found the token).
+
+    The lock path is derived from the current value of REGISTRY_PATH on every call, not
+    captured once at import time - tests reassign the module-level REGISTRY_PATH to redirect
+    the whole store into a temp directory, and the lock must follow that redirect too, or a
+    test run would take out a real lock against this repo's own tenants/ directory instead of
+    its isolated temp copy."""
+    registry_lock_path = REGISTRY_PATH.parent / f"{REGISTRY_PATH.name}.lock"
+    registry_lock_path.parent.mkdir(parents=True, exist_ok=True)
+    with registry_lock_path.open("w") as lock_handle:
+        fcntl.flock(lock_handle, fcntl.LOCK_EX)
+        try:
+            yield _load_registry()
+        finally:
+            fcntl.flock(lock_handle, fcntl.LOCK_UN)
 
 
 def _hash_token(token):
@@ -85,20 +125,20 @@ def create_profile(tenant_id, frontend_root=None, backend_root=None, description
     the explicit path for changing an existing tenant's config."""
     if not PROFILE_KEY_RE.match(tenant_id):
         raise TenantError(f"tenant id {tenant_id!r} must be lowercase letters/digits, hyphen-separated (e.g. acme, my-project)")
-    registry = _load_registry()
-    if tenant_id in registry["tenants"]:
-        raise TenantError(f"tenant {tenant_id!r} already exists - use update_profile() to change it")
-    entry = build_entry(
-        tenant_id,
-        frontend_root=frontend_root,
-        backend_root=backend_root,
-        description=description,
-        extra_never_access=extra_never_access,
-        business_file=business_file,
-    )
-    entry["token_hashes"] = []
-    registry["tenants"][tenant_id] = entry
-    _save_registry(registry)
+    with _locked_registry() as registry:
+        if tenant_id in registry["tenants"]:
+            raise TenantError(f"tenant {tenant_id!r} already exists - use update_profile() to change it")
+        entry = build_entry(
+            tenant_id,
+            frontend_root=frontend_root,
+            backend_root=backend_root,
+            description=description,
+            extra_never_access=extra_never_access,
+            business_file=business_file,
+        )
+        entry["token_hashes"] = []
+        registry["tenants"][tenant_id] = entry
+        _save_registry(registry)
     return _public_profile(entry)
 
 
@@ -106,15 +146,15 @@ def update_profile(tenant_id, **fields):
     """Merge `fields` into an existing tenant's profile. Never touches token_hashes - use
     issue_token()/revoke_token() for that, so credential state and profile state can't be
     silently overwritten by the same call."""
-    registry = _load_registry()
-    entry = registry["tenants"].get(tenant_id)
-    if entry is None:
-        raise TenantError(f"unknown tenant {tenant_id!r}")
-    for key, value in fields.items():
-        if key == "token_hashes":
-            raise TenantError("update_profile() cannot modify token_hashes - use issue_token()/revoke_token()")
-        entry[key] = value
-    _save_registry(registry)
+    with _locked_registry() as registry:
+        entry = registry["tenants"].get(tenant_id)
+        if entry is None:
+            raise TenantError(f"unknown tenant {tenant_id!r}")
+        for key, value in fields.items():
+            if key == "token_hashes":
+                raise TenantError("update_profile() cannot modify token_hashes - use issue_token()/revoke_token()")
+            entry[key] = value
+        _save_registry(registry)
     return _public_profile(entry)
 
 
@@ -135,11 +175,11 @@ def list_profiles():
 
 
 def delete_profile(tenant_id):
-    registry = _load_registry()
-    if tenant_id not in registry["tenants"]:
-        raise TenantError(f"unknown tenant {tenant_id!r}")
-    del registry["tenants"][tenant_id]
-    _save_registry(registry)
+    with _locked_registry() as registry:
+        if tenant_id not in registry["tenants"]:
+            raise TenantError(f"unknown tenant {tenant_id!r}")
+        del registry["tenants"][tenant_id]
+        _save_registry(registry)
 
 
 def _public_profile(entry):
@@ -152,13 +192,13 @@ def issue_token(tenant_id, admin=False):
     """Generates a new secret token, stores only its hash, and returns the plaintext token
     exactly once - the caller is responsible for delivering it to the tenant; this module never
     logs or persists it in recoverable form."""
-    registry = _load_registry()
-    entry = registry["tenants"].get(tenant_id)
-    if entry is None:
-        raise TenantError(f"unknown tenant {tenant_id!r}")
-    token = secrets.token_urlsafe(32)
-    entry.setdefault("token_hashes", []).append({"hash": _hash_token(token), "admin": bool(admin)})
-    _save_registry(registry)
+    with _locked_registry() as registry:
+        entry = registry["tenants"].get(tenant_id)
+        if entry is None:
+            raise TenantError(f"unknown tenant {tenant_id!r}")
+        token = secrets.token_urlsafe(32)
+        entry.setdefault("token_hashes", []).append({"hash": _hash_token(token), "admin": bool(admin)})
+        _save_registry(registry)
     return token
 
 
@@ -166,14 +206,14 @@ def revoke_token(token):
     """Removes a token's hash from whichever tenant holds it. Idempotent - revoking an
     already-revoked or unknown token is a no-op, not an error, since the caller's goal (that
     token no longer works) is already satisfied either way."""
-    registry = _load_registry()
-    target_hash = _hash_token(token)
-    for entry in registry["tenants"].values():
-        before = len(entry.get("token_hashes", []))
-        entry["token_hashes"] = [record for record in entry.get("token_hashes", []) if record["hash"] != target_hash]
-        if len(entry["token_hashes"]) != before:
-            _save_registry(registry)
-            return
+    with _locked_registry() as registry:
+        target_hash = _hash_token(token)
+        for entry in registry["tenants"].values():
+            before = len(entry.get("token_hashes", []))
+            entry["token_hashes"] = [record for record in entry.get("token_hashes", []) if record["hash"] != target_hash]
+            if len(entry["token_hashes"]) != before:
+                _save_registry(registry)
+                return
 
 
 def resolve_tenant_from_token(token):

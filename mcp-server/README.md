@@ -127,13 +127,13 @@ what actually enforce authorization either way.
 | `opsgate_check_paths` | `opsgate.check_paths_result` | `request` (object) | JSON |
 | `opsgate_preflight` | `opsgate.preflight_result` | `request` (object) | JSON |
 | `opsgate_show_profile` | `opsgate.show_profile_result` | `request` (object, optional) | JSON |
-| `opsgate_record_decision` | `opsgate.record_decision_result` | `hitl_id` + `answer` (strings) | JSON - **appends to `runs/decisions.pylog` on this server's machine** |
+| `opsgate_record_decision` | `opsgate.record_decision_result` | `hitl_id` + `answer` (strings) | JSON - **appends to `runs/<tenant-id>/decisions.pylog` on this server's machine** |
 | `opsgate_sync_instructions` | `opsgate_knowledge.project_files_manifest` | none | JSON - `{path, size}` for every file in the instruction system, no content (see below for why) |
 | `opsgate_sync_file` | `opsgate_knowledge.project_file_text` | `path` (string, from the manifest above) | JSON - `{path, content}` for that one file; the caller must write it itself, this server cannot |
 
 `opsgate_sync_instructions` returns a manifest, not file content, because the combined content (~90KB JSON-encoded as of this writing) has been observed to exceed at least one real MCP client's per-tool-result size cap (~32KB) - it truncated mid-response into invalid JSON rather than erroring cleanly. Every individual file fits comfortably under that limit, so `opsgate_sync_file` fetches one at a time instead.
 
-### `/mcp/claude/` - 15 tools (the 4 above minus the sync tools, plus 10 compiler-chain tools)
+### `/mcp/claude/` - 15 tools (5 shared with `/mcp/replit/` above, minus its 2 Replit-only sync tools, plus 10 compiler-chain tools exclusive to this mount)
 
 | Tool | Calls | Input | Output |
 |---|---|---|---|

@@ -156,6 +156,16 @@ async def main():
         profile_a_via_claude = await show_profile(token_a, url=claude_url)
         record("tenant A's token resolves the same profile via /mcp/claude too", profile_a_via_claude.get("resolved_profile") == TENANT_A)
 
+        # --- Tenant-id threading regression: opsgate_route_request must resolve the CALLER's own
+        # tenant profile_roots (a real bug once silently fell back to local-dev's None/None roots
+        # regardless of which tenant's token authenticated the call).
+        route_a = await call_with_token(claude_url, token_a, lambda s: s.call_tool("opsgate_route_request", {"request": {"id": "route-check-a", "outcome": "test", "module": "x"}}))
+        route_a_payload = json.loads(route_a.content[0].text)
+        record(
+            "opsgate_route_request resolves the caller's own tenant profile_roots, not local-dev's",
+            route_a_payload.get("profile_roots", {}).get("frontend_root") == "acme-client/src",
+        )
+
         async def check_paths(token, write_paths):
             result = await call_with_token(replit_url, token, lambda s: s.call_tool("opsgate_check_paths", {"request": {"scope": {"write_paths": write_paths}}}))
             return json.loads(result.content[0].text)
@@ -193,6 +203,16 @@ async def main():
         # embedded in the returned run_dir, not which specific token made the call)
         record("opsgate_init_run scopes the run directory under the caller's own tenant_id", run_a_payload.get("run_dir") == f"runs/{TENANT_B}/same-run-id")
 
+        # opsgate_init_run's own directory scoping was already correct; the bug was that the
+        # route.py it persists inside that directory was computed with no tenant_id at all, so
+        # it silently carried local-dev's (None, None) roots instead of the run's own tenant's.
+        route_py_ns = {}
+        exec((ROOT_DIR / run_a_payload["run_dir"] / "route.py").read_text(encoding="utf-8"), route_py_ns)
+        record(
+            "opsgate_init_run's persisted route.py reflects the run's own tenant profile_roots, not local-dev's",
+            route_py_ns["ROUTE"].get("profile_roots", {}).get("frontend_root") == "globex-web/src",
+        )
+
         decision_b = await call_with_token(claude_url, token_b, lambda s: s.call_tool("opsgate_record_decision", {"hitl_id": "HITL-shared-id-Q1", "answer": "tenant B's answer"}))
         decision_b_payload = json.loads(decision_b.content[0].text)
         record("opsgate_record_decision attributes the entry to the caller's own tenant_id", decision_b_payload.get("tenant_id") == TENANT_B)
@@ -201,6 +221,18 @@ async def main():
 
         oversized_answer = await call_with_token(claude_url, token_b, lambda s: s.call_tool("opsgate_record_decision", {"hitl_id": "HITL-oversized-Q1", "answer": "x" * 6000}))
         record("opsgate_record_decision rejects an oversized answer instead of writing it", bool(oversized_answer.isError))
+
+        # A hitl_id used to have no shape requirement at all - any string got appended to
+        # decisions.pylog as if it were a valid, attributable decision.
+        malformed_id_decision = await call_with_token(claude_url, token_b, lambda s: s.call_tool("opsgate_record_decision", {"hitl_id": "not-a-hitl-id-at-all", "answer": "some answer"}))
+        record("opsgate_record_decision rejects a hitl_id that doesn't match the required HITL id shape", bool(malformed_id_decision.isError))
+
+        # Unlike decisions.pylog (an intentionally unbounded append-only log), opsgate_init_run
+        # creates a brand-new directory with several files per call and had no size cap at all -
+        # a real disk-fill vector for any caller holding a valid tenant token.
+        oversized_run = await call_with_token(claude_url, token_b, lambda s: s.call_tool("opsgate_init_run", {"request": {"id": "oversized-run", "outcome": "x" * 60000, "module": "x", "scope": {"write_paths": ["x"]}}}))
+        record("opsgate_init_run rejects an oversized request instead of writing it to disk", bool(oversized_run.isError))
+        record("opsgate_init_run's size rejection left no directory behind", not (ROOT_DIR / "runs" / TENANT_B / "oversized-run").exists())
 
         # --- Knowledge resources, shared across both mounts - checked via /mcp/replit ---
         hitl_resource = await call_with_token(replit_url, SHARED_TOKEN, lambda s: s.read_resource("opsgate://knowledge/hitl-protocol"))

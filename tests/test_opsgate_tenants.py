@@ -11,6 +11,8 @@ Run: python3 tests/test_opsgate_tenants.py
 """
 import sys
 import tempfile
+import threading
+import time
 from pathlib import Path
 
 TESTS_DIR = Path(__file__).resolve().parent
@@ -82,6 +84,45 @@ def main():
         record("update_profile cannot touch token_hashes directly", expect_raises(tenants.update_profile, "acme", token_hashes=["forged"]))
         record("list_profiles never exposes token_hashes", "token_hashes" not in tenants.list_profiles()["acme"])
         record("get_profile never exposes token_hashes", "token_hashes" not in tenants.get_profile("acme"))
+
+        # --- Concurrency: the registry's read-modify-write cycle must not lose a write to a
+        # race. Without _locked_registry(), two near-simultaneous issue_token() calls for
+        # different tenants could each load the registry before the other saves, and whichever
+        # saves last would silently overwrite the other's new token with a stale in-memory copy
+        # (a lost update) - real risk on a file the tenant registry is the entire trust boundary
+        # for. Deliberately widens the load-to-save window (via a patched, slower _load_registry)
+        # well past what real disk I/O would ever take, so this test would reliably fail if the
+        # lock were ever removed or a new mutator forgot to use it.
+        original_load_registry = tenants._load_registry
+
+        def slow_load_registry():
+            data = original_load_registry()
+            time.sleep(0.05)
+            return data
+
+        race_tenants = [f"race-tenant-{i}" for i in range(8)]
+        for race_tenant in race_tenants:
+            tenants.create_profile(race_tenant, frontend_root="x")
+        issued = {}
+        tenants._load_registry = slow_load_registry
+        try:
+            barrier = threading.Barrier(len(race_tenants))
+
+            def issue_for(race_tenant):
+                barrier.wait()
+                issued[race_tenant] = tenants.issue_token(race_tenant)
+
+            race_threads = [threading.Thread(target=issue_for, args=(race_tenant,)) for race_tenant in race_tenants]
+            for thread in race_threads:
+                thread.start()
+            for thread in race_threads:
+                thread.join()
+        finally:
+            tenants._load_registry = original_load_registry
+        record(
+            "concurrent issue_token calls for different tenants under a widened race window all persist (no lost update)",
+            all(tenants.resolve_tenant(issued.get(race_tenant)) == race_tenant for race_tenant in race_tenants),
+        )
 
     failed = [name for name, passed, _ in RESULTS if not passed]
     print(f"\n{len(RESULTS) - len(failed)}/{len(RESULTS)} checks passed.")

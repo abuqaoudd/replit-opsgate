@@ -14,6 +14,7 @@ import re
 import sys
 from pathlib import Path
 
+import opsgate_contracts
 import opsgate_lexer
 import opsgate_tenants
 from opsgate_io import ROOT_DIR, load_data, load_request, print_json, usage, write_python_data
@@ -40,13 +41,14 @@ def _extract_tenant_flag(argv):
 
 
 def cmd_route_request(argv):
+    tenant_id, argv = _extract_tenant_flag(argv)
     if not argv:
-        usage("Usage: python3 tools/opsgate.py route-request <request.json>")
-    print_json(route_request(load_request(argv[0])))
+        usage("Usage: python3 tools/opsgate.py route-request <request.json> [--tenant <id>]")
+    print_json(route_request(load_request(argv[0]), tenant_id=tenant_id))
 
 
-def check_capabilities_result(request):
-    route = route_request(request)
+def check_capabilities_result(request, tenant_id=None):
+    route = route_request(request, tenant_id=tenant_id)
     gates = read_json("manifests/capability-gates.json")
     missing = []
     capabilities = set((request.get("authorizations") or {}).keys())
@@ -62,9 +64,10 @@ def check_capabilities_result(request):
 
 
 def cmd_check_capabilities(argv):
+    tenant_id, argv = _extract_tenant_flag(argv)
     if not argv:
-        usage("Usage: python3 tools/opsgate.py check-capabilities <request.json>")
-    result = check_capabilities_result(load_request(argv[0]))
+        usage("Usage: python3 tools/opsgate.py check-capabilities <request.json> [--tenant <id>]")
+    result = check_capabilities_result(load_request(argv[0]), tenant_id=tenant_id)
     print_json(result)
     if not result["can_proceed"]:
         raise SystemExit(1)
@@ -186,8 +189,8 @@ def cmd_compile_prompt(argv):
     print(compile_prompt_text(load_request(argv[0]), tenant_id=tenant_id))
 
 
-def init_state_result(request):
-    route = route_request(request)
+def init_state_result(request, tenant_id=None):
+    route = route_request(request, tenant_id=tenant_id)
     state = {
         "request_id": request.get("id"),
         "status": "blocked" if route.get("blocked") else "ready",
@@ -215,7 +218,7 @@ def init_state_result(request):
             },
             {
                 "id": "PHASE-1",
-                "status": "planned",
+                "status": "blocked" if route.get("blocked") else "planned",
                 "outcome": request.get("outcome"),
                 "write_paths": (request.get("scope") or {}).get("write_paths") or [],
                 "verification_gate": request.get("acceptance") or [],
@@ -226,9 +229,10 @@ def init_state_result(request):
 
 
 def cmd_init_state(argv):
+    tenant_id, argv = _extract_tenant_flag(argv)
     if not argv:
-        usage("Usage: python3 tools/opsgate.py init-state <request.json>")
-    print_json(init_state_result(load_request(argv[0])))
+        usage("Usage: python3 tools/opsgate.py init-state <request.json> [--tenant <id>]")
+    print_json(init_state_result(load_request(argv[0]), tenant_id=tenant_id))
 
 
 def parse_report_result(text):
@@ -257,15 +261,23 @@ def parse_report_result(text):
         if match and re.search(r"[./]", match.group(1)):
             files.append(match.group(1).replace("`", "").strip())
     hitl = [line.strip() for line in lines if re.search(r"HITL-[A-Za-z0-9-]+", line)]
+    outcome_section = collect_section([r"^#+\s*outcome", r"^#+\s*summary"])
+    acceptance_section = collect_section([r"^#+\s*acceptance"])
+    blockers = collect_section([r"^#+\s*blockers?", r"^#+\s*limitations?"])
     risk = collect_section([r"^#+\s*residual risk", r"^#+\s*remaining risk"])
+    # True only if at least one recognizable section/marker was actually found in the text.
+    # Distinguishes "the report says nothing failed" from "this input didn't look like a report
+    # at all" - callers (next_phase_prompt_text) must not treat the latter as a clean pass.
+    has_signal = bool(outcome_section or acceptance_section or checks or files or hitl or blockers or risk)
     return {
-        "outcome": (collect_section([r"^#+\s*outcome", r"^#+\s*summary"]) or ["Not detected"])[0],
-        "acceptance_status": (collect_section([r"^#+\s*acceptance"]) or ["Not detected"])[0],
+        "outcome": (outcome_section or ["Not detected"])[0],
+        "acceptance_status": (acceptance_section or ["Not detected"])[0],
         "files_changed": unique(files),
         "checks": checks,
         "hitl_decisions": hitl,
-        "blockers": collect_section([r"^#+\s*blockers?", r"^#+\s*limitations?"]),
+        "blockers": blockers,
         "residual_risk": risk or ["Not detected"],
+        "has_signal": has_signal,
     }
 
 
@@ -451,9 +463,18 @@ def cmd_next_phase_prompt(argv):
 
 
 def next_phase_prompt_text(state, report):
+    # Checked before looking at individual phase statuses or the report at all: a run's
+    # top-level `blocked` status is the actual capability-gate outcome, and must not be
+    # bypassable by a phase whose own status was (or could again be) mis-set to look runnable.
+    if state.get("status") == "blocked":
+        missing = state.get("missing_authority") or []
+        lines = "\n".join(f"- {item}" for item in missing) or "- See the run state's missing_authority for detail."
+        return f"# Phase Blocked\n\nDo not generate the next implementation prompt. This run's overall status is `blocked` - a capability gate has not been cleared, regardless of any individual phase or report status.\n\n## Missing Authority\n\n{lines}"
     next_phase = next((phase for phase in state.get("phases", []) if phase.get("status") in ["planned", "ready"]), None)
     if not next_phase:
         return "# No Next Phase\n\nNo planned or ready phase was found in the supplied run state."
+    if not report.get("has_signal", True):
+        return "# Report Not Recognized\n\nThe supplied report contained no recognizable outcome, check, blocker, or risk section. Do not generate the next implementation prompt from an unparseable report - request a report in the expected format before advancing."
     failed = [check for check in report.get("checks", []) if check.get("status") == "FAILED"]
     blockers = report.get("blockers") or []
     if failed or blockers:
@@ -489,6 +510,11 @@ Resume from the next incomplete phase. Do not repeat completed discovery unless 
 
 _UNSAFE_RUN_ID_CHARS = re.compile(r"[^A-Za-z0-9_-]")
 
+MAX_INIT_RUN_REQUEST_LENGTH = 50000  # generous for a real request's outcome/acceptance/scope
+# fields, while bounding how much disk one opsgate_init_run call can write - unlike
+# decisions.pylog (an intentionally unbounded append-only log), each run gets its own new
+# directory with several files, so nothing here should be allowed to be arbitrarily large.
+
 
 def init_run_result(request, tenant_id=None):
     """`tenant_id` scopes the run under `runs/<tenant_id>/` - without this, every tenant wrote
@@ -496,7 +522,10 @@ def init_run_result(request, tenant_id=None):
     `request["id"]` would silently overwrite each other's run. Defaults to
     opsgate_tenants.LOCAL_DEV_TENANT_ID, matching every other tenant-aware *_result function."""
     tenant_id = tenant_id or opsgate_tenants.LOCAL_DEV_TENANT_ID
-    route = route_request(request)
+    request_length = len(json.dumps(request))
+    if request_length > MAX_INIT_RUN_REQUEST_LENGTH:
+        raise ValueError(f"request must be at most {MAX_INIT_RUN_REQUEST_LENGTH} JSON-encoded characters, got {request_length}")
+    route = route_request(request, tenant_id=tenant_id)
     run_id = request.get("id") or f"REQ-{int(_dt.datetime.now().timestamp() * 1000)}"
     # request["id"] is caller-controlled (including over the MCP server) and used as a runs/
     # directory name below - strip anything but a single safe path segment's worth of
@@ -529,6 +558,12 @@ MAX_DECISION_FIELD_LENGTH = 5000  # generous for "the smallest decision needed..
 # call can grow one tenant's decisions.pylog - there is no other size limit on this file, since
 # it is an append-only audit log a tenant is expected to keep growing over real usage.
 
+# Reuses the exact pattern HITL_SCHEMA already requires of a HITL id, rather than a second,
+# independently-drifting regex - a decision log entry should require at least the same shape a
+# real HITL decision object is validated against, not accept an arbitrary string as if it were
+# a valid, attributable decision.
+HITL_ID_PATTERN = re.compile(opsgate_contracts.HITL_SCHEMA["properties"]["id"]["pattern"])
+
 
 def record_decision_result(hitl_id, answer, tenant_id=None):
     """`tenant_id` scopes which tenant's own `decisions.pylog` this gets appended to - without
@@ -538,6 +573,8 @@ def record_decision_result(hitl_id, answer, tenant_id=None):
     tenant_id = tenant_id or opsgate_tenants.LOCAL_DEV_TENANT_ID
     if len(str(hitl_id)) > MAX_DECISION_FIELD_LENGTH or len(str(answer)) > MAX_DECISION_FIELD_LENGTH:
         raise ValueError(f"hitl_id/answer must each be at most {MAX_DECISION_FIELD_LENGTH} characters")
+    if not HITL_ID_PATTERN.match(str(hitl_id)):
+        raise ValueError(f"hitl_id {hitl_id!r} does not match the required HITL id shape {HITL_ID_PATTERN.pattern!r}")
     safe_tenant_id = _UNSAFE_RUN_ID_CHARS.sub("_", str(tenant_id))
     entry = {"recorded_at": _dt.datetime.now(_dt.timezone.utc).isoformat().replace("+00:00", "Z"), "id": hitl_id, "answer": answer, "tenant_id": tenant_id}
     decisions = ROOT_DIR / "runs" / safe_tenant_id / "decisions.pylog"

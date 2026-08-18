@@ -87,6 +87,33 @@ def main():
         unknown_raised = True
     record("skill_workflow_text raises UnknownSkillError for an unknown skill", unknown_raised)
 
+    # _skill_path() used to build the path before checking anything, then only check
+    # path.exists() - so a `skill` value containing a traversal (`../../etc`) or an absolute
+    # path (which pathlib lets silently discard REPLIT_SKILLS_ROOT entirely: Path("root") /
+    # "/etc" / "x" == Path("/etc/x")) could resolve to any file on disk literally named
+    # SKILL.md, not just a real skill's own file. Concrete proof of the old bug: joining
+    # REPLIT_SKILLS_ROOT with this absolute path to a REAL skill's own directory reproduces
+    # that exact real file - i.e. the old exists()-only check would have happily served it
+    # even though the caller-supplied `skill` string is not any known skill name. It must now
+    # be rejected by the same known-skills allowlist as any other bad name.
+    real_skill_dir = str(knowledge.REPLIT_SKILLS_ROOT / skill_names[0])
+    record(
+        "reproduces the old vulnerable join: an absolute `skill` path still resolves to a real SKILL.md",
+        (knowledge.REPLIT_SKILLS_ROOT / real_skill_dir / "SKILL.md").exists(),
+    )
+    for traversal_attempt in [
+        "../../../../../../../../etc/passwd",
+        "../../ai/security.md",
+        real_skill_dir,
+        f"{real_skill_dir}/",
+    ]:
+        traversal_raised = False
+        try:
+            knowledge._skill_path(traversal_attempt)
+        except knowledge.UnknownSkillError:
+            traversal_raised = True
+        record(f"_skill_path rejects traversal/absolute skill name {traversal_attempt!r}", traversal_raised)
+
     for skill in skill_names:
         source_full = knowledge._skill_path(skill).read_text(encoding="utf-8").strip()
         full_out = knowledge.skill_full_text(skill)

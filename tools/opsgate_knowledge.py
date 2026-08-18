@@ -123,10 +123,17 @@ def list_skill_names():
 
 
 def _skill_path(skill):
-    path = REPLIT_SKILLS_ROOT / skill / "SKILL.md"
-    if not path.exists():
-        raise UnknownSkillError(f"No skill workflow named {skill!r} (known: {', '.join(list_skill_names())})")
-    return path
+    # Allowlist-checked before any path is built, the same way _instruction_object_path() checks
+    # `name` against INSTRUCTION_OBJECT_NAMES - `skill` is caller-supplied (including over the
+    # MCP server's opsgate://knowledge/skill-workflow/{skill} resource) and must never reach a
+    # Path join unchecked: `REPLIT_SKILLS_ROOT / "../../etc" / "SKILL.md"` walks outside the
+    # skills root, and `REPLIT_SKILLS_ROOT / "/etc" / "SKILL.md"` discards REPLIT_SKILLS_ROOT
+    # entirely (pathlib treats an absolute second operand as a full replacement). A prior
+    # exists()-only check let both through for any path that happened to contain a SKILL.md.
+    known_skills = list_skill_names()
+    if skill not in known_skills:
+        raise UnknownSkillError(f"No skill workflow named {skill!r} (known: {', '.join(known_skills)})")
+    return REPLIT_SKILLS_ROOT / skill / "SKILL.md"
 
 
 def skill_workflow_text(skill):

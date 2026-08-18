@@ -4,6 +4,7 @@ Split out of opsgate.py (relocation, not a rewrite). Everything here builds the 
 markdown prompt text handed to an implementing agent - the Mandatory HITL Gate block, the
 Per-Action Gate line, discovery steps, and the per-deliverable artifact prompt bodies.
 """
+import re
 
 
 def as_list(items, fallback="None specified"):
@@ -39,6 +40,20 @@ def fence_caller_text(text):
     text = text.replace(CALLER_DATA_OPEN, "(caller text - opening marker removed)")
     text = text.replace(CALLER_DATA_CLOSE, "(caller text - closing marker removed)")
     return f"{CALLER_DATA_OPEN}\n{text}\n{CALLER_DATA_CLOSE}"
+
+
+def sanitize_inline_text(value):
+    """For caller-supplied values embedded inline rather than in a fenced block - the module
+    title, a known_context owner/caller/test name, a scope path - where fence_caller_text()'s
+    visible block markers would look broken (a title, or one cell of a table row). Collapses
+    all whitespace/line breaks to a single space and neutralizes the caller-data delimiters,
+    the same way fence_caller_text() does. A line break is exactly what would let a
+    single-line-looking field (module, an owner name) inject a fake heading or a forged fence
+    boundary into the compiled prompt; a legitimate value for any of these fields is inherently
+    one line, so nothing real is lost by flattening it."""
+    text = str(value)
+    text = text.replace(CALLER_DATA_OPEN, "(marker removed)").replace(CALLER_DATA_CLOSE, "(marker removed)")
+    return re.sub(r"\s+", " ", text).strip()
 
 
 HITL_DECISION_BLOCK = """If blocked, return only:
@@ -130,11 +145,11 @@ def discovery_steps(request=None):
 6. Run the smallest risk-based checks available in the project."""
     known_lines = []
     if owners:
-        known_lines.append(f"Owner(s): {', '.join(owners)}")
+        known_lines.append(f"Owner(s): {', '.join(sanitize_inline_text(item) for item in owners)}")
     if callers:
-        known_lines.append(f"Direct caller(s)/import site(s): {', '.join(callers)}")
+        known_lines.append(f"Direct caller(s)/import site(s): {', '.join(sanitize_inline_text(item) for item in callers)}")
     if tests:
-        known_lines.append(f"Relevant test(s): {', '.join(tests)}")
+        known_lines.append(f"Relevant test(s): {', '.join(sanitize_inline_text(item) for item in tests)}")
     known_block = "; ".join(known_lines)
     return f"""1. Capture scoped status and diff for approved paths.
 2. Owner, callers, and tests are already known from the request - {known_block}. Do a quick targeted check that this is still current (git status/diff on those exact paths) instead of open-ended discovery; only widen the search if one of these is stale or missing.
@@ -144,11 +159,13 @@ def discovery_steps(request=None):
 
 
 def context_block(request):
+    scope = request.get("scope") or {}
+    module = request.get("module")
     return f"""## Context
 
-- Module: {request.get("module") or "Not specified"}
-- Write paths: {", ".join((request.get("scope") or {}).get("write_paths") or []) or "None specified"}
-- Read paths: {", ".join((request.get("scope") or {}).get("read_paths") or []) or "None specified"}
+- Module: {sanitize_inline_text(module) if module else "Not specified"}
+- Write paths: {", ".join(sanitize_inline_text(path) for path in (scope.get("write_paths") or [])) or "None specified"}
+- Read paths: {", ".join(sanitize_inline_text(path) for path in (scope.get("read_paths") or [])) or "None specified"}
 
 ### Outcome
 
@@ -175,7 +192,8 @@ def compile_replit_prompt(request, route, protected_paths):
     if route.get("blocked"):
         blocked = f"\n## Blocked Capability Gate\n\nDo not implement yet. Missing required authority/evidence:\n\n{as_list(route.get('missing_authority'))}\n"
     scope = request.get("scope") or {}
-    return f"""# {request.get("module") or "Replit Task"}
+    module = request.get("module")
+    return f"""# {sanitize_inline_text(module) if module else "Replit Task"}
 
 {CALLER_DATA_NOTICE}
 
@@ -214,8 +232,8 @@ Use each object's Responsibility, Inputs, Must Not, Workflow, and Output Evidenc
 
 | Access | Paths |
 |---|---|
-| Write | {", ".join(scope.get("write_paths") or []) or "No write paths authorized"} |
-| Minimum read-only | {", ".join(scope.get("read_paths") or []) or "Only direct owners, callers, and tests needed for the task"} |
+| Write | {", ".join(sanitize_inline_text(path) for path in (scope.get("write_paths") or [])) or "No write paths authorized"} |
+| Minimum read-only | {", ".join(sanitize_inline_text(path) for path in (scope.get("read_paths") or [])) or "Only direct owners, callers, and tests needed for the task"} |
 | Never access | {", ".join(protected_paths.get("never_access", [])) or "No never_access paths configured for the active profile"}, resolved aliases, protected generated or production systems |
 
 Must remain unchanged:

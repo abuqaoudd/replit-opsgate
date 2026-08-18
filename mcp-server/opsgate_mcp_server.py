@@ -203,7 +203,7 @@ def _active_tenant_id():
     ),
 )
 def opsgate_route_request(request: dict) -> dict:
-    return opsgate.route_request(request or {})
+    return opsgate.route_request(request or {}, tenant_id=_active_tenant_id())
 
 
 @shared_tool(
@@ -215,7 +215,7 @@ def opsgate_route_request(request: dict) -> dict:
     ),
 )
 def opsgate_check_capability(request: dict) -> dict:
-    return opsgate.check_capabilities_result(request or {})
+    return opsgate.check_capabilities_result(request or {}, tenant_id=_active_tenant_id())
 
 
 @shared_tool(
@@ -265,7 +265,7 @@ def opsgate_show_profile(request: dict | None = None) -> dict:
     ),
 )
 def opsgate_init_state(request: dict) -> dict:
-    return opsgate.init_state_result(request or {})
+    return opsgate.init_state_result(request or {}, tenant_id=_active_tenant_id())
 
 
 @claude_tool(
