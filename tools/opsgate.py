@@ -524,12 +524,20 @@ def cmd_init_run(argv):
     print_json(init_run_result(load_request(argv[0]), tenant_id=tenant_id))
 
 
+MAX_DECISION_FIELD_LENGTH = 5000  # generous for "the smallest decision needed... exact scope"
+# (replit.md's own phrasing for what a HITL answer should be) while bounding how much a single
+# call can grow one tenant's decisions.pylog - there is no other size limit on this file, since
+# it is an append-only audit log a tenant is expected to keep growing over real usage.
+
+
 def record_decision_result(hitl_id, answer, tenant_id=None):
     """`tenant_id` scopes which tenant's own `decisions.pylog` this gets appended to - without
     this, every tenant shared one global log with no attribution, so any caller could append a
     decision for a HITL-ID that looked like it belonged to a different tenant's task, with no
     record of who actually wrote it. Defaults to opsgate_tenants.LOCAL_DEV_TENANT_ID."""
     tenant_id = tenant_id or opsgate_tenants.LOCAL_DEV_TENANT_ID
+    if len(str(hitl_id)) > MAX_DECISION_FIELD_LENGTH or len(str(answer)) > MAX_DECISION_FIELD_LENGTH:
+        raise ValueError(f"hitl_id/answer must each be at most {MAX_DECISION_FIELD_LENGTH} characters")
     safe_tenant_id = _UNSAFE_RUN_ID_CHARS.sub("_", str(tenant_id))
     entry = {"recorded_at": _dt.datetime.now(_dt.timezone.utc).isoformat().replace("+00:00", "Z"), "id": hitl_id, "answer": answer, "tenant_id": tenant_id}
     decisions = ROOT_DIR / "runs" / safe_tenant_id / "decisions.pylog"

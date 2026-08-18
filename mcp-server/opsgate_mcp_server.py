@@ -366,7 +366,9 @@ def opsgate_lint_prompt(prompt_markdown: str) -> dict:
         "runs/<tenant-id>/decisions.pylog - scoped and attributed to the caller's own resolved "
         "tenant, so one tenant's decisions never mix with another's - so the decision survives "
         "outside the current conversation. Call this immediately after a human answers a HITL "
-        "question, before resuming work."
+        "question, before resuming work. Both hitl_id and answer are capped at 5000 characters "
+        "each - a real HITL answer is 'the smallest decision needed... exact scope', not a "
+        "long document."
     ),
 )
 def opsgate_record_decision(hitl_id: str, answer: str) -> dict:

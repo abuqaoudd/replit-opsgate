@@ -24,6 +24,7 @@ token can never address another tenant's profile by passing a different ID.
 """
 import copy
 import hashlib
+import hmac
 import json
 import re
 import secrets
@@ -184,7 +185,12 @@ def resolve_tenant_from_token(token):
     target_hash = _hash_token(token)
     for tenant_id, entry in _load_registry()["tenants"].items():
         for record in entry.get("token_hashes", []):
-            if record["hash"] == target_hash:
+            # Comparing hashes, not the raw secret, so a timing leak here wouldn't expose
+            # anything usable toward guessing a token (SHA-256's avalanche property means
+            # "closer" hash bytes give no signal about the preimage) - hmac.compare_digest
+            # anyway, for the same reason the shared-secret check uses it: consistency, not a
+            # real exploit this closes.
+            if hmac.compare_digest(record["hash"], target_hash):
                 return tenant_id, bool(record.get("admin"))
     return None, False
 

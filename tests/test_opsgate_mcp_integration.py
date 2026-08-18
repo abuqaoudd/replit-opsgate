@@ -199,6 +199,9 @@ async def main():
         decisions_log = ROOT_DIR / "runs" / TENANT_B / "decisions.pylog"
         record("opsgate_record_decision writes to a tenant-scoped decisions.pylog, not a shared global one", decisions_log.exists())
 
+        oversized_answer = await call_with_token(claude_url, token_b, lambda s: s.call_tool("opsgate_record_decision", {"hitl_id": "HITL-oversized-Q1", "answer": "x" * 6000}))
+        record("opsgate_record_decision rejects an oversized answer instead of writing it", bool(oversized_answer.isError))
+
         # --- Knowledge resources, shared across both mounts - checked via /mcp/replit ---
         hitl_resource = await call_with_token(replit_url, SHARED_TOKEN, lambda s: s.read_resource("opsgate://knowledge/hitl-protocol"))
         record("HITL protocol resource reachable under the full wired system", "Human-in-the-Loop" in hitl_resource.contents[0].text)
