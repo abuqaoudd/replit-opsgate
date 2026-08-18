@@ -42,13 +42,27 @@ python3 <engine-dir>/mcp-server/opsgate_mcp_server.py --host 127.0.0.1 --port 87
 ```
 
 Flags default to `OPSGATE_MCP_HOST` / `OPSGATE_MCP_PORT` env vars, then
-`127.0.0.1:8765`. The server listens for MCP's "streamable-http" transport at
-`http://<host>:<port>/mcp`.
+`127.0.0.1:8765`. One process, two separate MCP mount paths - see "Two tool
+surfaces, one process" below for why:
+
+- `http://<host>:<port>/mcp/replit/` - Replit's own implementation-time gate/profile/decision/sync tools.
+- `http://<host>:<port>/mcp/claude/` - Claude's prompt-compiler chain (intake/route/compile/next-phase/parse/lint/init/export).
+
+**The trailing slash matters.** Hitting the bare path (`/mcp/replit`, no
+trailing slash) gets a `307 Temporary Redirect` to the same URL with a
+trailing slash added - each mount's own route is registered at `/`, and
+Starlette only treats the mount prefix's bare remainder as a redirect
+candidate, not a direct match. A `307` on a `POST` is exactly the kind of
+thing a real MCP client might not follow correctly (confirmed the redirect
+happens; not confirmed every client handles it) - so configure the
+trailing-slash URL directly in whichever client connects, rather than relying
+on the redirect.
 
 This only starts the server locally - it is not reachable from Replit's cloud
 Agent until it's exposed through a tunnel (ngrok, Cloudflare Tunnel, Tailscale
 Funnel, etc.) and that tunnel's public HTTPS URL is registered in Replit's
-"Connect via MCP" settings. That's a separate step from just running this file.
+"Connect via MCP" settings (pointed at the `/mcp/replit/` path specifically).
+That's a separate step from just running this file.
 
 ## Authentication
 
@@ -91,31 +105,52 @@ wants `local-dev` to have real roots can register it like any other tenant
 (`opsgate_tenants.create_profile("local-dev", ...)`) - a real registry entry always takes
 precedence over the built-in default.
 
-## Tools exposed
+## Two tool surfaces, one process
 
-Names match the convention `replit.md` Section 10 ("MCP tool availability")
-already documents - `opsgate_` prefix. All 16 runtime tools:
+Names match the convention `replit.md` Section 9 ("MCP tool availability")
+already documents - `opsgate_` prefix. Replit and Claude call this server for
+different reasons - Replit runs gate checks on its own implementation work;
+Claude compiles governed prompts *for* Replit, upstream of any implementation,
+then parses Replit's reports back (see `ADOPTION_GUIDE.md` for the full
+chain). So each gets its own mount with only the tools its role needs, rather
+than one tool list serving neither role cleanly. **This is a discoverability
+split, not a security boundary** - both mounts sit behind the same
+`TokenAuthMiddleware`/tenant resolution (a valid token authenticates
+identically against either path), and the gates inside each tool call are
+what actually enforce authorization either way.
+
+### `/mcp/replit/` - 7 tools
 
 | Tool | Calls | Input | Output |
 |---|---|---|---|
-| `opsgate_route_request` | `opsgate.route_request` | `request` (object) | JSON |
 | `opsgate_check_capability` | `opsgate.check_capabilities_result` | `request` (object) | JSON |
 | `opsgate_check_paths` | `opsgate.check_paths_result` | `request` (object) | JSON |
 | `opsgate_preflight` | `opsgate.preflight_result` | `request` (object) | JSON |
 | `opsgate_show_profile` | `opsgate.show_profile_result` | `request` (object, optional) | JSON |
+| `opsgate_record_decision` | `opsgate.record_decision_result` | `hitl_id` + `answer` (strings) | JSON - **appends to `runs/decisions.pylog` on this server's machine** |
+| `opsgate_sync_instructions` | `opsgate_knowledge.project_files_manifest` | none | JSON - `{path, size}` for every file in the instruction system, no content (see below for why) |
+| `opsgate_sync_file` | `opsgate_knowledge.project_file_text` | `path` (string, from the manifest above) | JSON - `{path, content}` for that one file; the caller must write it itself, this server cannot |
+
+`opsgate_sync_instructions` returns a manifest, not file content, because the combined content (~90KB JSON-encoded as of this writing) has been observed to exceed at least one real MCP client's per-tool-result size cap (~32KB) - it truncated mid-response into invalid JSON rather than erroring cleanly. Every individual file fits comfortably under that limit, so `opsgate_sync_file` fetches one at a time instead.
+
+### `/mcp/claude/` - 15 tools (the 4 above minus the sync tools, plus 10 compiler-chain tools)
+
+| Tool | Calls | Input | Output |
+|---|---|---|---|
+| `opsgate_check_capability` / `opsgate_check_paths` / `opsgate_preflight` / `opsgate_show_profile` | (shared - see left) | | |
+| `opsgate_intake_request` | `opsgate.intake_request_result` | `text` (plain sentence) | JSON |
+| `opsgate_route_request` | `opsgate.route_request` | `request` (object) | JSON |
 | `opsgate_init_state` | `opsgate.init_state_result` | `request` (object) | JSON |
 | `opsgate_init_run` | `opsgate.init_run_result` | `request` (object) | JSON - **writes `runs/<id>/` to disk on this server's machine** |
 | `opsgate_compile_prompt` | `opsgate.compile_prompt_text` | `request` (object) | prose text |
 | `opsgate_next_phase_prompt` | `opsgate.next_phase_prompt_text` | `run_state` + `parsed_report` (objects) | prose text |
-| `opsgate_intake_request` | `opsgate.intake_request_result` | `text` (plain sentence) | JSON |
 | `opsgate_parse_report` | `opsgate.parse_report_result` | `report_markdown` (text) | JSON |
 | `opsgate_lint_report` | `opsgate.lint_report_result` | `report_markdown` (text) | JSON |
 | `opsgate_lint_prompt` | `opsgate.lint_prompt_result` | `prompt_markdown` (text) | JSON |
-| `opsgate_record_decision` | `opsgate.record_decision_result` | `hitl_id` + `answer` (strings) | JSON - **appends to `runs/decisions.pylog` on this server's machine** |
 | `opsgate_export_ruleset` | `opsgate_knowledge.export_ruleset` | none | JSON - snapshot of every resource below, for offline/CI use |
-| `opsgate_sync_instructions` | `opsgate_knowledge.project_files_bundle` | none | JSON - `replit.md` + every `ai/*.md` + every skill file, each with its target install `path`; the caller must write these itself, this server cannot |
+| `opsgate_record_decision` | (shared - see left) | | |
 
-Every request-shaped tool above (all but `opsgate_export_ruleset`/`opsgate_sync_instructions`) resolves its profile/protected
+Every request-shaped tool above (all but `opsgate_export_ruleset`/`opsgate_sync_instructions`/`opsgate_sync_file`) resolves its profile/protected
 paths from whichever tenant resolved in Authentication above - a real tenant's own profile, or
 `LOCAL_DEV_TENANT_ID`'s default - via that tool's underlying `opsgate.*` function's `tenant_id`
 parameter.
@@ -132,7 +167,8 @@ blocked, exactly as it would from the CLI's exit code.
 ## Resources exposed
 
 Read-only governance content, backed by `tools/opsgate_knowledge.py`, which reads its canonical
-source files live at call time - never a copied string, so it can't drift from source.
+source files live at call time - never a copied string, so it can't drift from source. Registered
+on **both** `/mcp/replit/` and `/mcp/claude/` - unlike the tools above, nothing here is mount-specific.
 
 | Resource | Always-on? | Backed by |
 |---|---|---|
@@ -157,6 +193,8 @@ actually names, not all of them unconditionally.
   confirmed to land in the right place.
 - `tests/test_opsgate_mcp_integration.py` re-runs this against the real running server on
   every change: the legacy shared-secret path, two real tenants' isolation (including a
-  revoked token failing closed immediately), and every resource/the export tool above, all
-  over genuine MCP protocol calls rather than direct Python calls. Requires this directory's
-  `.venv`; run with `mcp-server/.venv/bin/python3 tests/test_opsgate_mcp_integration.py`.
+  revoked token failing closed immediately), every resource/the export tool above, and the
+  two-mount split itself (each mount lists exactly its own tools, the 5 shared ones appear on
+  both, the same tenant token resolves identically regardless of which mount it's used
+  against) - all over genuine MCP protocol calls rather than direct Python calls. Requires
+  this directory's `.venv`; run with `mcp-server/.venv/bin/python3 tests/test_opsgate_mcp_integration.py`.

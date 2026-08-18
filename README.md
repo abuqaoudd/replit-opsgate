@@ -1,6 +1,6 @@
 # OpsGate
 
-A governance engine for AI coding agents working on Replit projects: prompt/skill content with object-oriented instruction contracts, served through a hosted, multi-tenant MCP server (`mcp-server/`) that exposes gates and routing as live tool calls instead of prose an agent reasons through by hand.
+A governance engine for AI coding agents building Replit-hosted projects - Replit doing the implementation, Claude (or any other MCP-capable client) compiling the governed prompts it works from - served through a hosted, multi-tenant MCP server (`mcp-server/`) that exposes gates, routing, and prompt compilation as live tool calls instead of prose an agent reasons through by hand.
 
 ## Architecture
 
@@ -12,9 +12,9 @@ A governance engine for AI coding agents working on Replit projects: prompt/skil
 
 ## Using this engine
 
-Register `mcp-server/opsgate_mcp_server.py` with an MCP-capable client (Replit's Connect via MCP, Claude, etc.) - see `mcp-server/README.md` for running it, exposing it through a tunnel, and its full tool/resource table. Every gate (`opsgate_preflight`, `opsgate_check_paths`, `opsgate_check_capability`, ...) runs as a real tool call against the caller's own resolved tenant, not manual reasoning.
+Register this server twice, once per role, at two different mount paths on the same running process: Replit's "Connect via MCP" points at `/mcp/replit/` (gate/profile/decision tools for its own implementation work, plus the instruction-sync tools below); Claude (or any client compiling prompts for Replit) points at `/mcp/claude/` (the prompt-compiler chain - intake/route/compile/next-phase/parse/lint/init/export). Five gate/profile/decision tools are shared across both. See `mcp-server/README.md` for running it, exposing it through a tunnel, and the full per-mount tool/resource table. Every gate (`opsgate_preflight`, `opsgate_check_paths`, `opsgate_check_capability`, ...) runs as a real tool call against the caller's own resolved tenant, not manual reasoning.
 
-Copy `content/references/replit.md`, `content/references/ai/**`, and `content/references/replit-skills/**` into a target Replit project's root once, as `replit.md`, `ai/**`, and `.agents/skills/**` respectively - this is the one per-project step; the MCP server provides the gates and supplementary knowledge resources (HITL protocol, security rules, skill workflows, instruction objects - see `mcp-server/README.md`'s "Resources exposed"), but `replit.md` remains the primary root instruction file a Replit Agent reads first.
+Install (or refresh) a target Replit project's own `replit.md`/`ai/**`/`.agents/skills/**`: have Replit call `opsgate_sync_instructions` for a manifest of every file, then `opsgate_sync_file(path)` once per entry, writing each to its given path - this works identically for a brand-new project (nothing installed yet) and a stale existing one. A first-ever install still needs one manual step first, since the *currently* installed `replit.md` has to already contain the instruction to call these tools - either paste `content/references/replit.md`/`ai/**`/`replit-skills/**` in by hand once, or just tell Replit directly to call `opsgate_sync_instructions` and write what it returns. The MCP server also provides supplementary knowledge resources (HITL protocol, security rules, skill workflows, instruction objects - see `mcp-server/README.md`'s "Resources exposed"), but `replit.md` remains the primary root instruction file a Replit Agent reads first.
 
 Onboard a new tenant (a new project or team) with `tools/opsgate_tenants.py`:
 

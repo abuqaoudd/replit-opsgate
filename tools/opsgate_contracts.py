@@ -4,9 +4,10 @@ ENGINE_MANIFEST = {'name': 'opsgate',
  'version': '7.0.0',
  'release_date': '2026-08-17',
  'source_version': '7',
- 'purpose': 'Governance engine for AI coding agents working on Replit projects: canonical prompt/skill '
-            'content with object-oriented instruction contracts, served through a hosted, multi-tenant '
-            'MCP server (mcp-server/) exposing gates as live tool calls.',
+ 'purpose': 'Governance engine for AI coding agents building Replit-hosted projects - Replit doing the '
+            'implementation, Claude (or any other MCP-capable client) compiling the governed prompts it '
+            'works from - served through a hosted, multi-tenant MCP server (mcp-server/) exposing gates, '
+            'routing, and prompt compilation as live tool calls.',
  'content_root': 'content',
  'commands': {'validate': 'python3 tools/opsgate.py validate-engine',
               'test_all': 'python3 tools/opsgate.py test-all',
@@ -209,8 +210,9 @@ CAPABILITY_GATES = {'ordinary_application_change': {'default': 'allowed_when_sco
 # real protection instead of an empty or missing protected-path list.
 _UNIVERSAL_NEVER_ACCESS = ['.git/**', '.env', '.env.*', 'node_modules/**', '.github/workflows/**', '.claude/**', '.agents/memory/**']
 # Locked-by-default categories are already project-agnostic (packages, lockfiles, schema,
-# secrets, etc. are universal engineering categories, not METCO-specific paths), so both
-# profiles below share the exact same list rather than each declaring their own copy.
+# secrets, etc. are universal engineering categories, not project-specific paths), so every
+# tenant (see opsgate_tenants.protected_paths_for_tenant()) shares this exact same list rather
+# than each declaring its own copy.
 _UNIVERSAL_LOCKED_BY_DEFAULT = ['packages',
                                'lockfiles',
                                'dependencies',

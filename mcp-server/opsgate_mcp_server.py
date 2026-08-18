@@ -9,12 +9,19 @@ call. Nothing about routing, gate logic, or prompt compilation is duplicated her
 functions in opsgate.py/opsgate_prompts.py/opsgate_tenants.py are the single source of truth
 for both callers.
 
-Tool names match the convention `replit.md` Section 10 already documents
+Tool names match the convention `replit.md` Section 9 already documents
 ("MCP tool availability") - `opsgate_` prefix, e.g. `opsgate_check_capability`,
 `opsgate_check_paths`, `opsgate_preflight`, `opsgate_record_decision`, plus the
 routing/lint tools it mentions in passing. A Replit Agent that already reads
 that section needs no new instructions to use this server once it is
 registered - the tool names it was told to expect are the tool names here.
+
+Two mount paths, not one: `/mcp/replit` (gate/profile/decision tools plus the
+instruction-sync tools) and `/mcp/claude` (the prompt-compiler chain -
+intake/route/compile/next-phase/parse/lint/init/export), sharing five gate
+tools both roles need. See the "Two separate tool surfaces" comment below for
+why - in short, each caller gets only the tools its own role actually needs,
+not a security boundary (both mounts share the same auth/tenant resolution).
 
 Where this lives: `<engine-dir>/mcp-server/opsgate_mcp_server.py`, a sibling
 of `tools/`. It imports `opsgate.py` directly from the real `tools/`
@@ -50,6 +57,7 @@ once to stderr at startup. See `mcp-server/README.md` for details.
 """
 
 import argparse
+import contextlib
 import contextvars
 import hmac
 import os
@@ -79,20 +87,82 @@ except ImportError:
 
 try:
     import uvicorn
+    from starlette.applications import Starlette
     from starlette.responses import JSONResponse
+    from starlette.routing import Mount
 except ImportError:
     sys.exit("The 'uvicorn'/'starlette' packages are not installed - they should come with 'mcp'. Run: pip install mcp")
 
 
-mcp = FastMCP(
-    name="opsgate",
+# ---------------------------------------------------------------------------
+# Two separate tool surfaces, one process. Replit and Claude call this server
+# for different reasons - Replit runs gate checks on its own implementation
+# work (replit.md Section 9); Claude compiles governed prompts *for* Replit,
+# upstream of any implementation, then parses Replit's reports back (see
+# ADOPTION_GUIDE.md). Rather than one FastMCP instance handing every caller
+# every tool regardless of which role applies, each surface gets its own
+# mount path with only the tools that role actually needs - a shorter,
+# accurate tool list per caller instead of one tool list serving neither
+# role cleanly. Five gate/profile/decision tools are needed by both (Claude
+# checks gates upstream before compiling a prompt; Replit re-checks them
+# itself mid-session) and are registered on both via shared_tool below.
+#
+# This is a discoverability split, not a security boundary: both mounts sit
+# behind the same TokenAuthMiddleware/tenant resolution, so a valid token
+# authenticates identically against either path - the gates inside each tool
+# call are what actually enforce authorization, unchanged by which mount was
+# used to reach them.
+# ---------------------------------------------------------------------------
+
+mcp_replit = FastMCP(
+    name="opsgate-replit",
     instructions=(
-        "Gate, routing, and lint tools for this project's own Replit-agent orchestration "
-        "engine. See this project's replit.md (Section 10, 'MCP tool availability') for "
-        "when and how an Agent should call these instead of re-deriving the same checks by "
-        "hand."
+        "Gate, profile, and decision tools for a Replit Agent's own implementation work. "
+        "See this project's replit.md (Section 9, 'MCP tool availability') for when and how "
+        "to call these instead of re-deriving the same checks by hand."
     ),
 )
+mcp_claude = FastMCP(
+    name="opsgate-claude",
+    instructions=(
+        "Tools for Claude acting as the prompt compiler for a Replit-hosted project: turn "
+        "plain-language input into a routed, gate-checked request, compile it into a "
+        "self-contained prompt for a Replit session, then parse that session's report back "
+        "into the next phase's prompt. See this engine's ADOPTION_GUIDE.md for the full chain."
+    ),
+)
+for _app in (mcp_replit, mcp_claude):
+    _app.settings.streamable_http_path = "/"
+
+
+def replit_tool(**kwargs):
+    def decorator(fn):
+        return mcp_replit.tool(**kwargs)(fn)
+
+    return decorator
+
+
+def claude_tool(**kwargs):
+    def decorator(fn):
+        return mcp_claude.tool(**kwargs)(fn)
+
+    return decorator
+
+
+def shared_tool(**kwargs):
+    def decorator(fn):
+        mcp_claude.tool(**kwargs)(fn)
+        return mcp_replit.tool(**kwargs)(fn)
+
+    return decorator
+
+
+def shared_resource(uri, **kwargs):
+    def decorator(fn):
+        mcp_claude.resource(uri, **kwargs)(fn)
+        return mcp_replit.resource(uri, **kwargs)(fn)
+
+    return decorator
 
 
 # ---------------------------------------------------------------------------
@@ -117,11 +187,14 @@ def _active_tenant_id():
 # Tools - one per runtime cmd_* function in opsgate.py. Maintenance-only
 # commands (validate-json, validate-engine, test-all) are deliberately not
 # exposed here - those are engine-authoring operations run by hand inside
-# this repo, not gate/routing calls a live Replit task needs.
+# this repo, not gate/routing calls a live Replit task or a Claude prompt-
+# compilation call needs. Each tool below is registered via
+# shared_tool/replit_tool/claude_tool depending on which mount(s) it belongs
+# to - see the block above for why.
 # ---------------------------------------------------------------------------
 
 
-@mcp.tool(
+@claude_tool(
     name="opsgate_route_request",
     description=(
         "Resolve which deliverable, mode, skill, references, and execution shape a request "
@@ -133,7 +206,7 @@ def opsgate_route_request(request: dict) -> dict:
     return opsgate.route_request(request or {})
 
 
-@mcp.tool(
+@shared_tool(
     name="opsgate_check_capability",
     description=(
         "Deterministic capability_gate check: does this request's own authorizations cover "
@@ -145,7 +218,7 @@ def opsgate_check_capability(request: dict) -> dict:
     return opsgate.check_capabilities_result(request or {})
 
 
-@mcp.tool(
+@shared_tool(
     name="opsgate_check_paths",
     description=(
         "Deterministic protected_path_gate check: do this request's write/read scope paths "
@@ -157,7 +230,7 @@ def opsgate_check_paths(request: dict) -> dict:
     return opsgate.check_paths_result(request or {}, tenant_id=_active_tenant_id())
 
 
-@mcp.tool(
+@shared_tool(
     name="opsgate_preflight",
     description=(
         "Run every deterministic gate (scope_gate, capability_gate, protected_path_gate) in "
@@ -170,7 +243,7 @@ def opsgate_preflight(request: dict) -> dict:
     return opsgate.preflight_result(request or {}, tenant_id=_active_tenant_id())
 
 
-@mcp.tool(
+@shared_tool(
     name="opsgate_show_profile",
     description=(
         "Show which profile is currently active (tenant token, env var, request field, or "
@@ -183,7 +256,7 @@ def opsgate_show_profile(request: dict | None = None) -> dict:
     return opsgate.show_profile_result(request or {}, tenant_id=_active_tenant_id())
 
 
-@mcp.tool(
+@claude_tool(
     name="opsgate_init_state",
     description=(
         "Build the initial run-state object (status, phases if execution is phased, empty "
@@ -195,7 +268,7 @@ def opsgate_init_state(request: dict) -> dict:
     return opsgate.init_state_result(request or {})
 
 
-@mcp.tool(
+@claude_tool(
     name="opsgate_init_run",
     description=(
         "Create a runs/<request-id>/ directory on this server's own machine with the "
@@ -208,7 +281,7 @@ def opsgate_init_run(request: dict) -> dict:
     return opsgate.init_run_result(request or {})
 
 
-@mcp.tool(
+@claude_tool(
     name="opsgate_compile_prompt",
     description=(
         "Compile a full Replit prompt or artifact-authoring prompt (scope, HITL gate, "
@@ -220,7 +293,7 @@ def opsgate_compile_prompt(request: dict) -> str:
     return opsgate.compile_prompt_text(request or {}, tenant_id=_active_tenant_id())
 
 
-@mcp.tool(
+@claude_tool(
     name="opsgate_next_phase_prompt",
     description=(
         "Given a run's current state and the parsed report from its most recently completed "
@@ -233,7 +306,7 @@ def opsgate_next_phase_prompt(run_state: dict, parsed_report: dict) -> str:
     return opsgate.next_phase_prompt_text(run_state or {}, parsed_report or {})
 
 
-@mcp.tool(
+@claude_tool(
     name="opsgate_intake_request",
     description=(
         "Turn a single plain-language sentence describing what someone wants (no JSON, no "
@@ -246,7 +319,7 @@ def opsgate_intake_request(text: str) -> dict:
     return opsgate.intake_request_result(text or "")
 
 
-@mcp.tool(
+@claude_tool(
     name="opsgate_parse_report",
     description=(
         "Parse a final-report markdown document into structured fields: outcome, acceptance "
@@ -258,7 +331,7 @@ def opsgate_parse_report(report_markdown: str) -> dict:
     return opsgate.parse_report_result(report_markdown or "")
 
 
-@mcp.tool(
+@claude_tool(
     name="opsgate_lint_report",
     description=(
         "Check whether a final-report markdown document has every required section (HITL "
@@ -271,7 +344,7 @@ def opsgate_lint_report(report_markdown: str) -> dict:
     return opsgate.lint_report_result(report_markdown or "")
 
 
-@mcp.tool(
+@claude_tool(
     name="opsgate_lint_prompt",
     description=(
         "Check whether a compiled Replit prompt states every required concept (scope/phase "
@@ -284,7 +357,7 @@ def opsgate_lint_prompt(prompt_markdown: str) -> dict:
     return opsgate.lint_prompt_result(prompt_markdown or "")
 
 
-@mcp.tool(
+@shared_tool(
     name="opsgate_record_decision",
     description=(
         "Persist a human's answer to a HITL decision (by its HITL-ID) to this server's own "
@@ -304,7 +377,7 @@ def opsgate_record_decision(hitl_id: str, answer: str) -> dict:
 # ---------------------------------------------------------------------------
 
 
-@mcp.resource(
+@shared_resource(
     "opsgate://knowledge/hitl-protocol",
     name="HITL protocol",
     description="The full Human-in-the-Loop specification: exclusive triggers, pre-trigger test, check frequency, pause contract, decision request format, resume protocol, and final evidence.",
@@ -314,7 +387,7 @@ def opsgate_hitl_protocol_resource() -> str:
     return opsgate_knowledge.hitl_protocol_text()
 
 
-@mcp.resource(
+@shared_resource(
     "opsgate://knowledge/security-rules",
     name="Security rules",
     description="Durable security rules (identity, authorization, sensitive data, uploads, logging, mutations, integrations, leakage prevention) - routing/activation prose is omitted since this resource is always on.",
@@ -324,7 +397,7 @@ def opsgate_security_rules_resource() -> str:
     return opsgate_knowledge.security_rules_text()
 
 
-@mcp.resource(
+@shared_resource(
     "opsgate://knowledge/skill-workflow/{skill}",
     name="Skill workflow",
     description=(
@@ -341,7 +414,7 @@ def opsgate_skill_workflow_resource(skill: str) -> str:
     return opsgate_knowledge.skill_workflow_text(skill)
 
 
-@mcp.resource(
+@shared_resource(
     "opsgate://knowledge/instruction-object/{name}",
     name="Instruction object",
     description=(
@@ -360,7 +433,7 @@ def opsgate_instruction_object_resource(name: str) -> str:
     return opsgate_knowledge.instruction_object_text(name)
 
 
-@mcp.tool(
+@claude_tool(
     name="opsgate_export_ruleset",
     description=(
         "Read-only snapshot of every rule this server currently exposes as knowledge "
@@ -374,25 +447,43 @@ def opsgate_export_ruleset() -> dict:
     return opsgate_knowledge.export_ruleset()
 
 
-@mcp.tool(
+@replit_tool(
     name="opsgate_sync_instructions",
     description=(
-        "Read-only: returns everything needed to install or refresh a project's own copy of "
-        "this engine's instruction system - replit.md, every ai/*.md instruction object, and "
-        "every skill workflow file - each with its own target install `path` (skill files "
-        "install under `.agents/skills/<skill>/SKILL.md`, a different directory name than "
-        "this engine's own `replit-skills/` source layout). This server cannot write into the "
-        "calling project's own filesystem - the caller must write each returned `content` to "
-        "its `path` verbatim, creating anything missing and overwriting anything that "
-        "differs, then re-read each to confirm the write succeeded. Works the same way for a "
-        "brand-new project (nothing installed yet - write every entry) and a stale existing "
-        "one (write only what differs). Does not create tenants or issue tokens - that stays "
-        "a separate, deliberate step (see ADOPTION_GUIDE.md), never self-service via this "
-        "tool. See ai/maintenance.md for the full instruction-maintenance workflow."
+        "Read-only: returns a manifest (`files`: a list of `{path, size}`, no content) of "
+        "every file needed to install or refresh a project's own copy of this engine's "
+        "instruction system - replit.md, every ai/*.md instruction object, and every skill "
+        "workflow file, installing under paths including `.agents/skills/<skill>/SKILL.md` "
+        "(a different directory name than this engine's own `replit-skills/` source layout). "
+        "Deliberately does NOT include file content in this call - the combined content is "
+        "large enough that at least one real MCP client has been observed to truncate/corrupt "
+        "a single tool result at roughly 32KB. Call opsgate_sync_file(path) once per entry in "
+        "`files` to fetch that file's actual content (every individual file fits well under "
+        "that limit), then write it to `path` yourself - this server cannot write into the "
+        "calling project's own filesystem. Works the same way for a brand-new project (nothing "
+        "installed yet - fetch and write every entry) and a stale existing one (write only "
+        "what differs). Does not create tenants or issue tokens - that stays a separate, "
+        "deliberate step (see ADOPTION_GUIDE.md), never self-service via this tool. See "
+        "ai/maintenance.md for the full instruction-maintenance workflow."
     ),
 )
 def opsgate_sync_instructions() -> dict:
-    return opsgate_knowledge.project_files_bundle()
+    return opsgate_knowledge.project_files_manifest()
+
+
+@replit_tool(
+    name="opsgate_sync_file",
+    description=(
+        "Read-only: returns the content for exactly one `path` from opsgate_sync_instructions' "
+        "manifest, as `{path, content}`. Call once per file when installing/refreshing a "
+        "project's instruction system - never all at once, since that's the combined-size "
+        "problem opsgate_sync_instructions' manifest split was built to avoid. This server "
+        "cannot write into the calling project's own filesystem - write `content` to `path` "
+        "verbatim yourself, then re-read it to confirm the write succeeded."
+    ),
+)
+def opsgate_sync_file(path: str) -> dict:
+    return {"path": path, "content": opsgate_knowledge.project_file_text(path)}
 
 
 # ---------------------------------------------------------------------------
@@ -488,12 +579,14 @@ def main():
     args = parser.parse_args()
     token = args.token or secrets.token_urlsafe(32)
     extra_hosts = list(args.allowed_host or []) + [h.strip() for h in os.environ.get("OPSGATE_MCP_ALLOWED_HOSTS", "").split(",") if h.strip()]
-    if extra_hosts and mcp.settings.transport_security:
-        mcp.settings.transport_security.allowed_hosts.extend(extra_hosts)
+    if extra_hosts:
+        for _app in (mcp_replit, mcp_claude):
+            if _app.settings.transport_security:
+                _app.settings.transport_security.allowed_hosts.extend(extra_hosts)
         print(f"opsgate MCP server: accepting extra Host header(s): {', '.join(extra_hosts)}", file=sys.stderr)
     print(f"opsgate MCP server: engine tools loaded from {ENGINE_TOOLS_DIR}", file=sys.stderr)
     print(f"opsgate MCP server: resolving profile config from cwd {Path.cwd()}", file=sys.stderr)
-    print(f"opsgate MCP server: listening on http://{args.host}:{args.port}/mcp", file=sys.stderr)
+    print(f"opsgate MCP server: listening on http://{args.host}:{args.port}/mcp/replit (Replit) and http://{args.host}:{args.port}/mcp/claude (Claude)", file=sys.stderr)
     if not args.token:
         print(
             "opsgate MCP server: no --token/OPSGATE_MCP_TOKEN set - generated one for this run.\n"
@@ -502,7 +595,26 @@ def main():
             "(e.g. for Replit's Connect via MCP custom-header config).",
             file=sys.stderr,
         )
-    app = TokenAuthMiddleware(mcp.streamable_http_app(), token)
+    replit_app = mcp_replit.streamable_http_app()
+    claude_app = mcp_claude.streamable_http_app()
+
+    @contextlib.asynccontextmanager
+    async def _combined_lifespan(_app):
+        # Mounting doesn't cascade the parent app's lifespan into these sub-apps on its own -
+        # each FastMCP instance's own StreamableHTTPSessionManager.run() must be entered
+        # explicitly, or every request fails with "Task group is not initialized" (confirmed
+        # empirically: mounting without this raises exactly that on the first real request).
+        async with mcp_replit.session_manager.run(), mcp_claude.session_manager.run():
+            yield
+
+    root_app = Starlette(
+        routes=[
+            Mount("/mcp/replit", app=replit_app),
+            Mount("/mcp/claude", app=claude_app),
+        ],
+        lifespan=_combined_lifespan,
+    )
+    app = TokenAuthMiddleware(root_app, token)
     uvicorn.run(app, host=args.host, port=args.port, log_level="info")
 
 

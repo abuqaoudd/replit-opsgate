@@ -49,6 +49,10 @@ class UnknownInstructionObjectError(Exception):
     """Raised for a name with no matching content/references/ai/<name>.md instruction object."""
 
 
+class UnknownProjectFileError(Exception):
+    """Raised for a path with no matching entry in project_files_manifest()."""
+
+
 def _split_sections(text):
     """Splits a markdown doc into (title_block, [(heading, section_text), ...]).
 
@@ -172,12 +176,34 @@ def project_files_bundle():
     }
 
 
-def export_ruleset():
-    """Read-only structured snapshot of every always-on rule this module currently exposes.
+def project_files_manifest():
+    """Every path project_files_bundle() would install, with each file's size but not its
+    content - small enough for any MCP client, unlike the full bundle (~90KB JSON-encoded,
+    observed to exceed at least one real MCP client's per-result size cap around 32KB). Call
+    project_file_text(path) once per entry to fetch that file's actual content."""
+    bundle = project_files_bundle()
+    entries = [bundle["replit_md"], *bundle["ai_objects"].values(), *bundle["skills"].values()]
+    return {"files": [{"path": entry["path"], "size": len(entry["content"])} for entry in entries]}
 
-    The direct replacement for pulling a `dist/` bundle to see the current ruleset offline or
-    in CI - a single call returns the same durable content the MCP resources below serve live.
-    """
+
+def project_file_text(path):
+    """The content for one path from project_files_manifest() - fetched one file at a time so
+    each MCP response stays small, instead of the combined bundle that some clients truncate."""
+    if path == "replit.md":
+        return root_instructions_text()
+    for name in INSTRUCTION_OBJECT_NAMES:
+        if path == f"ai/{name}.md":
+            return ai_object_full_text(name)
+    for skill in list_skill_names():
+        if path == f".agents/skills/{skill}/SKILL.md":
+            return skill_full_text(skill)
+    raise UnknownProjectFileError(f"No project file at path {path!r} - call project_files_manifest() for the known set")
+
+
+def export_ruleset():
+    """Read-only structured snapshot of every always-on rule this module currently exposes -
+    the same durable content the MCP resources below serve live, in one call, for offline or
+    CI use where reading those resources isn't practical."""
     return {
         "hitl_protocol": hitl_protocol_text(),
         "security_rules": security_rules_text(),

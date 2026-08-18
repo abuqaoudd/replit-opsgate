@@ -11,7 +11,7 @@ Storage is a simple, swappable file-backed JSON registry - the interface (get_pr
 create_profile/update_profile/list_profiles/token issuance/resolution) is what matters; the
 backend can become a real database later with no caller-visible change.
 
-Reuses opsgate_setup_lib.build_entry() directly (pure - no file I/O, no target-root coupling).
+Reuses opsgate_tenant_entry.build_entry() directly (pure - no file I/O, no target-root coupling).
 create_profile() below validates its own tenant-key pattern inline and raises TenantError on a
 bad key, rather than the sys.exit(1)-on-failure style that suits a CLI script but not library
 code a caller needs to catch and recover from.
@@ -29,7 +29,7 @@ import re
 import secrets
 from pathlib import Path
 
-from opsgate_setup_lib import build_entry
+from opsgate_tenant_entry import build_entry
 import opsgate_contracts
 
 ROOT_DIR = Path(__file__).resolve().parent.parent

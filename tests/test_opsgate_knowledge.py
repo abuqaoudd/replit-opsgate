@@ -162,6 +162,37 @@ def main():
         bundle.get("skills") == {skill: {"path": f".agents/skills/{skill}/SKILL.md", "content": knowledge.skill_full_text(skill)} for skill in skill_names},
     )
 
+    all_paths = [bundle["replit_md"]["path"]] + [v["path"] for v in bundle["ai_objects"].values()] + [v["path"] for v in bundle["skills"].values()]
+    manifest = knowledge.project_files_manifest()
+    record("project_files_manifest lists all 24 files (1 root + 9 ai + 14 skills)", len(manifest.get("files", [])) == 24, f"found {len(manifest.get('files', []))}")
+    record(
+        "project_files_manifest entries have no 'content' key",
+        all("content" not in entry for entry in manifest.get("files", [])),
+    )
+    record(
+        "project_files_manifest paths match project_files_bundle's paths exactly",
+        {entry["path"] for entry in manifest.get("files", [])} == set(all_paths),
+    )
+    record(
+        "project_files_manifest sizes match each file's actual content length",
+        all(entry["size"] == len(knowledge.project_file_text(entry["path"])) for entry in manifest.get("files", [])),
+    )
+
+    record("project_file_text('replit.md') matches root_instructions_text", knowledge.project_file_text("replit.md") == root_out)
+    record("project_file_text('ai/backend.md') matches ai_object_full_text('backend')", knowledge.project_file_text("ai/backend.md") == knowledge.ai_object_full_text("backend"))
+    sample_skill = skill_names[0]
+    record(
+        f"project_file_text('.agents/skills/{sample_skill}/SKILL.md') matches skill_full_text({sample_skill!r})",
+        knowledge.project_file_text(f".agents/skills/{sample_skill}/SKILL.md") == knowledge.skill_full_text(sample_skill),
+    )
+
+    unknown_path_raised = False
+    try:
+        knowledge.project_file_text("not/a/real/path.md")
+    except knowledge.UnknownProjectFileError:
+        unknown_path_raised = True
+    record("project_file_text raises UnknownProjectFileError for an unknown path", unknown_path_raised)
+
     failed = [name for name, passed, _ in RESULTS if not passed]
     print(f"\n{len(RESULTS) - len(failed)}/{len(RESULTS)} passed")
     if failed:
