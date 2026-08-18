@@ -19,6 +19,7 @@ from pathlib import Path
 from opsgate_io import ROOT_DIR
 
 HITL_SPEC_PATH = ROOT_DIR / "content" / "specifications" / "HITL_SPEC.md"
+ROOT_INSTRUCTIONS_PATH = ROOT_DIR / "content" / "references" / "replit.md"
 AI_OBJECTS_ROOT = ROOT_DIR / "content" / "references" / "ai"
 SECURITY_RULES_PATH = AI_OBJECTS_ROOT / "security.md"
 REPLIT_SKILLS_ROOT = ROOT_DIR / "content" / "references" / "replit-skills"
@@ -75,6 +76,14 @@ def hitl_protocol_text():
     return HITL_SPEC_PATH.read_text(encoding="utf-8").strip()
 
 
+def root_instructions_text():
+    """This engine's current canonical `replit.md`, unabridged - the root file a project is
+    expected to copy in once at install time, and to refresh from here when it drifts out of
+    date. Unlike the ai/*.md instruction objects, there is no routing scaffolding to drop:
+    the whole file is meant to be installed as-is."""
+    return ROOT_INSTRUCTIONS_PATH.read_text(encoding="utf-8").strip()
+
+
 def _instruction_object_path(name):
     if name not in INSTRUCTION_OBJECT_NAMES:
         raise UnknownInstructionObjectError(f"No instruction object named {name!r} (known: {', '.join(INSTRUCTION_OBJECT_NAMES)})")
@@ -91,6 +100,14 @@ def instruction_object_text(name):
     """
     text = _instruction_object_path(name).read_text(encoding="utf-8")
     return _drop_scaffolding(text, title_only=name not in KEEP_SUMMARY_LINE_FOR)
+
+
+def ai_object_full_text(name):
+    """The unabridged content of one `ai/<name>.md` instruction object, for literal
+    installation into a target project's own `ai/<name>.md` - unlike instruction_object_text(),
+    nothing is dropped: an installed file needs its Activation section (there is no
+    ROUTING_MANIFEST to defer to once it's a plain local file, not a live routing lookup)."""
+    return _instruction_object_path(name).read_text(encoding="utf-8").strip()
 
 
 def security_rules_text():
@@ -126,6 +143,33 @@ def skill_workflow_text(skill):
     renumbered = [re.sub(r"^\d+\.", f"{index}.", line, count=1) for index, line in enumerate(lines, start=1)]
 
     return "\n\n".join([title, "\n".join(renumbered), closing])
+
+
+def skill_full_text(skill):
+    """The unabridged content of one `replit-skills/<skill>/SKILL.md`, for literal
+    installation into a target project's `.agents/skills/<skill>/SKILL.md` - unlike
+    skill_workflow_text(), the YAML frontmatter and step 1 are kept: an installed skill file
+    must keep its frontmatter (ai/maintenance.md's own Validate section requires every
+    installed skill to have one with only `name`/`description`) and be readable standalone,
+    without a live ROUTING_MANIFEST to fill in what step 1 would have said."""
+    return _skill_path(skill).read_text(encoding="utf-8").strip()
+
+
+def project_files_bundle():
+    """Everything needed to install or refresh a target project's own copy of this engine's
+    instruction system: `replit.md`, every `ai/*.md` instruction object, and every skill
+    workflow file - unabridged, not the routing-stripped text export_ruleset()/the MCP
+    resources below serve. Each entry carries its own target install path, since skill files
+    install under a different directory name (`.agents/skills/`) than they live in here
+    (`replit-skills/`). Works the same for a brand-new project (nothing installed yet - write
+    every entry) and a stale existing one (write only the entries that differ from what's
+    already on disk) - the caller decides which, this function always returns the same
+    current bundle."""
+    return {
+        "replit_md": {"path": "replit.md", "content": root_instructions_text()},
+        "ai_objects": {name: {"path": f"ai/{name}.md", "content": ai_object_full_text(name)} for name in INSTRUCTION_OBJECT_NAMES},
+        "skills": {skill: {"path": f".agents/skills/{skill}/SKILL.md", "content": skill_full_text(skill)} for skill in list_skill_names()},
+    }
 
 
 def export_ruleset():

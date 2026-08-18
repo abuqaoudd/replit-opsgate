@@ -9,7 +9,7 @@ point is exercising the exact file the live server reads, not an isolated copy -
 every tenant it creates in a `finally` block so the registry is left exactly as it started.
 
 Requires the mcp-server/.venv environment (see mcp-server/README.md).
-Run: mcp-server/.venv/bin/python3 mcp-server/test_opsgate_mcp_integration.py
+Run: mcp-server/.venv/bin/python3 tests/test_opsgate_mcp_integration.py
 """
 import asyncio
 import json
@@ -20,11 +20,13 @@ import sys
 import time
 from pathlib import Path
 
-SERVER_DIR = Path(__file__).resolve().parent
-ROOT_DIR = SERVER_DIR.parent
+TESTS_DIR = Path(__file__).resolve().parent
+ROOT_DIR = TESTS_DIR.parent
 TOOLS_DIR = ROOT_DIR / "tools"
+SERVER_DIR = ROOT_DIR / "mcp-server"
 sys.path.insert(0, str(TOOLS_DIR))
 
+import opsgate_knowledge as knowledge  # noqa: E402
 import opsgate_tenants as tenants  # noqa: E402
 
 from mcp import ClientSession  # noqa: E402
@@ -163,6 +165,18 @@ async def main():
         record(
             "opsgate_export_ruleset returns all three Phase 3 categories under the full wired system",
             {"hitl_protocol", "security_rules", "skill_workflows", "instruction_objects"} <= export_payload.keys(),
+        )
+
+        sync = await call_with_token(url, SHARED_TOKEN, lambda s: s.call_tool("opsgate_sync_instructions", {}))
+        sync_payload = json.loads(sync.content[0].text)
+        record(
+            "opsgate_sync_instructions returns replit.md plus every ai object and skill, each with its install path",
+            sync_payload.get("replit_md", {}).get("path") == "replit.md"
+            and "# Replit Project Instructions" in sync_payload.get("replit_md", {}).get("content", "")
+            and set(sync_payload.get("ai_objects", {})) == set(knowledge.INSTRUCTION_OBJECT_NAMES)
+            and all(entry["path"] == f"ai/{name}.md" for name, entry in sync_payload.get("ai_objects", {}).items())
+            and set(sync_payload.get("skills", {})) == set(knowledge.list_skill_names())
+            and all(entry["path"] == f".agents/skills/{skill}/SKILL.md" for skill, entry in sync_payload.get("skills", {}).items()),
         )
 
     finally:

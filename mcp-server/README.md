@@ -94,7 +94,7 @@ precedence over the built-in default.
 ## Tools exposed
 
 Names match the convention `replit.md` Section 10 ("MCP tool availability")
-already documents - `opsgate_` prefix. All 15 runtime tools:
+already documents - `opsgate_` prefix. All 16 runtime tools:
 
 | Tool | Calls | Input | Output |
 |---|---|---|---|
@@ -113,8 +113,9 @@ already documents - `opsgate_` prefix. All 15 runtime tools:
 | `opsgate_lint_prompt` | `opsgate.lint_prompt_result` | `prompt_markdown` (text) | JSON |
 | `opsgate_record_decision` | `opsgate.record_decision_result` | `hitl_id` + `answer` (strings) | JSON - **appends to `runs/decisions.pylog` on this server's machine** |
 | `opsgate_export_ruleset` | `opsgate_knowledge.export_ruleset` | none | JSON - snapshot of every resource below, for offline/CI use |
+| `opsgate_sync_instructions` | `opsgate_knowledge.project_files_bundle` | none | JSON - `replit.md` + every `ai/*.md` + every skill file, each with its target install `path`; the caller must write these itself, this server cannot |
 
-Every request-shaped tool above (all but `opsgate_export_ruleset`) resolves its profile/protected
+Every request-shaped tool above (all but `opsgate_export_ruleset`/`opsgate_sync_instructions`) resolves its profile/protected
 paths from whichever tenant resolved in Authentication above - a real tenant's own profile, or
 `LOCAL_DEV_TENANT_ID`'s default - via that tool's underlying `opsgate.*` function's `tenant_id`
 parameter.
@@ -154,8 +155,8 @@ actually names, not all of them unconditionally.
   CLI command (`python3 tools/opsgate.py <command> ...`) produces, and `init_run` /
   `record_decision`'s disk side effects (`runs/<id>/`, `runs/decisions.pylog`) were
   confirmed to land in the right place.
-- `test_opsgate_mcp_integration.py` (same directory) re-runs this against the real running
-  server on every change: the legacy shared-secret path, two real tenants' isolation (including
-  a revoked token failing closed immediately), and every resource/the export tool above, all
+- `tests/test_opsgate_mcp_integration.py` re-runs this against the real running server on
+  every change: the legacy shared-secret path, two real tenants' isolation (including a
+  revoked token failing closed immediately), and every resource/the export tool above, all
   over genuine MCP protocol calls rather than direct Python calls. Requires this directory's
-  `.venv`; run with `mcp-server/.venv/bin/python3 mcp-server/test_opsgate_mcp_integration.py`.
+  `.venv`; run with `mcp-server/.venv/bin/python3 tests/test_opsgate_mcp_integration.py`.

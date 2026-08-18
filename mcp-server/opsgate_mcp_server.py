@@ -374,6 +374,27 @@ def opsgate_export_ruleset() -> dict:
     return opsgate_knowledge.export_ruleset()
 
 
+@mcp.tool(
+    name="opsgate_sync_instructions",
+    description=(
+        "Read-only: returns everything needed to install or refresh a project's own copy of "
+        "this engine's instruction system - replit.md, every ai/*.md instruction object, and "
+        "every skill workflow file - each with its own target install `path` (skill files "
+        "install under `.agents/skills/<skill>/SKILL.md`, a different directory name than "
+        "this engine's own `replit-skills/` source layout). This server cannot write into the "
+        "calling project's own filesystem - the caller must write each returned `content` to "
+        "its `path` verbatim, creating anything missing and overwriting anything that "
+        "differs, then re-read each to confirm the write succeeded. Works the same way for a "
+        "brand-new project (nothing installed yet - write every entry) and a stale existing "
+        "one (write only what differs). Does not create tenants or issue tokens - that stays "
+        "a separate, deliberate step (see ADOPTION_GUIDE.md), never self-service via this "
+        "tool. See ai/maintenance.md for the full instruction-maintenance workflow."
+    ),
+)
+def opsgate_sync_instructions() -> dict:
+    return opsgate_knowledge.project_files_bundle()
+
+
 # ---------------------------------------------------------------------------
 # Auth. This server has real side effects (opsgate_init_run writes to disk,
 # opsgate_record_decision appends to a log) and is meant to be reached through

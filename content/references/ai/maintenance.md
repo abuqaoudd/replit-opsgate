@@ -35,11 +35,12 @@ For material changes update the root instruction version and all affected indexe
 
 ## Workflow
 
-1. Identify the instruction objects, root rules, specs, templates, Python contracts, and skills affected by the requested change.
-2. Preserve one source of truth per rule and remove contradictions or duplicate stale prose.
-3. Keep object responsibilities, inputs, boundaries, workflows, and output evidence aligned.
-4. Update indexes, versions, references, and templates when the contract changes.
-5. Validate before release.
+1. If the requested change is to bring this project's own instruction system (`replit.md`, `ai/**`, `.agents/skills/**`) current with the engine's canonical versions - or this is a brand-new project with none installed yet - call `opsgate_sync_instructions`. It returns every current file with its own target `path` (skill files install under `.agents/skills/`, not `replit-skills/`). Write each returned file to its `path`, creating anything missing and overwriting anything that differs, leaving unrelated local files untouched; then re-read each to confirm the write succeeded. This never creates a tenant or token - if a brand-new project also needs one, that stays a separate, deliberate step (see `ADOPTION_GUIDE.md`), not something this call does on its own.
+2. Identify the instruction objects, root rules, specs, templates, Python contracts, and skills affected by the requested change.
+3. Preserve one source of truth per rule and remove contradictions or duplicate stale prose.
+4. Keep object responsibilities, inputs, boundaries, workflows, and output evidence aligned.
+5. Update indexes, versions, references, and templates when the contract changes.
+6. Validate before release.
 
 ## Output Evidence
 

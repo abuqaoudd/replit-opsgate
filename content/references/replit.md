@@ -137,7 +137,7 @@ The Per-Action Gate checks the same three cases as the Mandatory HITL Gate, at f
 
 ### Mandatory HITL Gate (per phase and final report)
 
-Call `opsgate_preflight` (see Section 10) to compute the Deterministic rows below - `scope_gate`, `capability_gate`, and `protected_path_gate` - directly; do not re-derive them by hand. The Judgment rows have no tool that can see them - they are the three HITL cases above, surfacing only during the work itself - and remain the agent's own reasoning either way.
+Call `opsgate_preflight` (see Section 9) to compute the Deterministic rows below - `scope_gate`, `capability_gate`, and `protected_path_gate` - directly; do not re-derive them by hand. The Judgment rows have no tool that can see them - they are the three HITL cases above, surfacing only during the work itself - and remain the agent's own reasoning either way.
 
 Every row below is checked the same way, but two different kinds of failure resolve differently, and only one of them is actually a HITL case:
 
@@ -259,23 +259,7 @@ Final report: outcome; files changed; ownership/reuse/creation decisions; checks
 
 Stop before accessing or changing protected content, unknown/production services, packages/config, generated contracts, unsupported public contracts, unauthorized schema/migration/seed files, destructive data, weakened security, or code with unresolved overwrite/deletion risk. Request only the smallest missing authorization or decision. When one of the three HITL cases applies, use the full-task pause and resume sequence above.
 
-## 9. Engine files
-
-If this engine's directory (see Section 2 for how to locate it - it may be named `replit-opsgate`, `opsgate-engine`, or something else) contains `tools/opsgate_contracts.py` and `tools/**`, treat them as the local engine contract for routing, capability gates, protected paths, run state, and report parsing. The rest of this section writes its path as `<engine-dir>/` - substitute the directory you actually found.
-
-Use:
-
-- `<engine-dir>/tools/opsgate_contracts.py` to determine deliverable, mode, skill, references, bounded/phased execution, capability gates, protected paths, and schemas.
-- `<engine-dir>/tools/opsgate_fixtures.py` for validation fixtures and gold-standard examples.
-- `python3 <engine-dir>/tools/opsgate.py route-request` when a structured request object or compatible request file is available.
-- `python3 <engine-dir>/tools/opsgate.py compile-prompt` when a structured request should be converted into a Replit prompt.
-- `python3 <engine-dir>/tools/opsgate.py intake-request` only as a cautious first pass for plain-language requests; do not invent high-risk paths or authorizations.
-
-The engine files guide routing and prompt generation. They do not grant write authority, bypass protected paths, or replace explicit user scope.
-
-Every command above resolves against the caller's own tenant profile, not a fixed project - pass `--tenant <id>` (or rely on the MCP server's own token-based resolution, see Section 10) rather than assuming this project's paths are the default.
-
-## 10. MCP tool availability
+## 9. MCP tool availability
 
 This engine's own gate tools (`opsgate_` prefix, configurable via the request's `mcp.tool_prefix` field - e.g. `opsgate_check_capability`, `opsgate_check_paths`, `opsgate_preflight`, `opsgate_record_decision`, plus routing/lint tools) are registered as real MCP tools. Call them directly; never re-derive the gate table in prose:
 
@@ -284,5 +268,7 @@ This engine's own gate tools (`opsgate_` prefix, configurable via the request's 
 - If a human answers a HITL question, call `opsgate_record_decision` with the HITL id and answer before resuming, so the decision is persisted outside the conversation.
 
 If a tool call errors or the MCP connection is unreachable, say so explicitly in the Final Report - the gate ran on inference instead of a computed result. MCP tool availability changes how a gate result is obtained, never what the gate requires or what counts as protected, locked, or authorized.
+
+This file, and this project's own `ai/**`/`.agents/skills/**`, can drift out of date against the engine's canonical versions - or be missing entirely on a brand-new project. Call `opsgate_sync_instructions` to check: it returns every current file (this one, every `ai/*.md` instruction object, every skill workflow), each with its own target install `path` - skill files install under `.agents/skills/`, a different directory name than this engine's own `replit-skills/` source. Write each returned file to its `path`, creating anything missing and overwriting anything that differs, then re-read each to confirm the write succeeded before continuing. This tool never creates tenants or tokens - that stays a separate, deliberate step outside this file's scope. See `ai/maintenance.md` for the full instruction-maintenance workflow.
 
 The same substitution applies inside a selected skill's own workflow steps, not only at the Mandatory HITL Gate checkpoints. Where a skill's numbered steps say to state or verify exact paths, expected owner, or applicable capability gates by hand, call `opsgate_preflight`/`opsgate_check_paths`/`opsgate_show_profile` for that instead - the answer is the same either way, a tool call is just the more reliable way to get it. Skills are not rewritten per mode to say this themselves; this paragraph is the one place it needs to be said.

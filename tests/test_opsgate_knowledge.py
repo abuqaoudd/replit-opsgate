@@ -3,12 +3,17 @@
 line-by-line where it claims to be verbatim, and section-by-section where it claims to drop
 only scaffolding.
 
-Run: python3 tools/test_opsgate_knowledge.py
+Run: python3 tests/test_opsgate_knowledge.py
 """
 import re
 import sys
+from pathlib import Path
 
-import opsgate_knowledge as knowledge
+TESTS_DIR = Path(__file__).resolve().parent
+ROOT_DIR = TESTS_DIR.parent
+sys.path.insert(0, str(ROOT_DIR / "tools"))
+
+import opsgate_knowledge as knowledge  # noqa: E402
 
 RESULTS = []
 
@@ -23,6 +28,10 @@ def main():
     hitl_source = knowledge.HITL_SPEC_PATH.read_text(encoding="utf-8").strip()
     hitl_out = knowledge.hitl_protocol_text()
     record("hitl_protocol_text is byte-identical to HITL_SPEC.md", hitl_out == hitl_source)
+
+    root_source = knowledge.ROOT_INSTRUCTIONS_PATH.read_text(encoding="utf-8").strip()
+    root_out = knowledge.root_instructions_text()
+    record("root_instructions_text is byte-identical to replit.md", root_out == root_source)
 
     security_source = knowledge.SECURITY_RULES_PATH.read_text(encoding="utf-8")
     security_out = knowledge.security_rules_text()
@@ -78,6 +87,12 @@ def main():
         unknown_raised = True
     record("skill_workflow_text raises UnknownSkillError for an unknown skill", unknown_raised)
 
+    for skill in skill_names:
+        source_full = knowledge._skill_path(skill).read_text(encoding="utf-8").strip()
+        full_out = knowledge.skill_full_text(skill)
+        record(f"{skill}: skill_full_text is byte-identical to source (unlike skill_workflow_text)", full_out == source_full)
+        record(f"{skill}: skill_full_text keeps its YAML frontmatter", full_out.startswith("---"))
+
     common_headings = ["Responsibility", "Inputs", "Must Not", "Workflow", "Output Evidence"]
     for name in knowledge.INSTRUCTION_OBJECT_NAMES:
         source_text = knowledge._instruction_object_path(name).read_text(encoding="utf-8")
@@ -108,6 +123,12 @@ def main():
         unknown_object_raised = True
     record("instruction_object_text raises UnknownInstructionObjectError for an unknown name", unknown_object_raised)
 
+    for name in knowledge.INSTRUCTION_OBJECT_NAMES:
+        source_full = knowledge._instruction_object_path(name).read_text(encoding="utf-8").strip()
+        full_out = knowledge.ai_object_full_text(name)
+        record(f"ai_object_full_text({name!r}) is byte-identical to source (unlike instruction_object_text)", full_out == source_full)
+        record(f"ai_object_full_text({name!r}) keeps the Activation heading", bool(re.search(r"^##\s+Activation\s*$", full_out, re.M)))
+
     ruleset = knowledge.export_ruleset()
     record("export_ruleset includes hitl_protocol", ruleset.get("hitl_protocol") == hitl_out)
     record("export_ruleset includes security_rules", ruleset.get("security_rules") == security_out)
@@ -127,6 +148,18 @@ def main():
             "skill_workflows": "content/references/replit-skills/<skill>/SKILL.md",
             "instruction_objects": "content/references/ai/<name>.md",
         },
+    )
+
+    bundle = knowledge.project_files_bundle()
+    record("project_files_bundle replit_md path is 'replit.md'", bundle.get("replit_md", {}).get("path") == "replit.md")
+    record("project_files_bundle replit_md content matches root_instructions_text", bundle.get("replit_md", {}).get("content") == root_out)
+    record(
+        "project_files_bundle ai_objects covers every instruction object with the right path/content",
+        bundle.get("ai_objects") == {name: {"path": f"ai/{name}.md", "content": knowledge.ai_object_full_text(name)} for name in knowledge.INSTRUCTION_OBJECT_NAMES},
+    )
+    record(
+        "project_files_bundle skills covers every skill with the .agents/skills/ install path and full content",
+        bundle.get("skills") == {skill: {"path": f".agents/skills/{skill}/SKILL.md", "content": knowledge.skill_full_text(skill)} for skill in skill_names},
     )
 
     failed = [name for name, passed, _ in RESULTS if not passed]

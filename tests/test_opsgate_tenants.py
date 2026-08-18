@@ -7,13 +7,17 @@ tenant ID fails closed rather than falling back to a default.
 Standalone, not yet wired into test-all.py. Uses an isolated temp registry file so it never
 touches or depends on a real tenants/registry.json.
 
-Run: python3 tools/test_opsgate_tenants.py
+Run: python3 tests/test_opsgate_tenants.py
 """
 import sys
 import tempfile
 from pathlib import Path
 
-import opsgate_tenants as tenants
+TESTS_DIR = Path(__file__).resolve().parent
+ROOT_DIR = TESTS_DIR.parent
+sys.path.insert(0, str(ROOT_DIR / "tools"))
+
+import opsgate_tenants as tenants  # noqa: E402
 
 RESULTS = []
 
