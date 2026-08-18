@@ -15,6 +15,7 @@ Run: mcp-server/.venv/bin/python3 tests/test_opsgate_mcp_integration.py
 import asyncio
 import json
 import os
+import shutil
 import socket
 import subprocess
 import sys
@@ -182,6 +183,22 @@ async def main():
             admin_profile.get("resolved_profile") == TENANT_A,
         )
 
+        # --- Tenant-scoped run/decision storage: same request id, two tenants, no collision ---
+        same_id_request = {"id": "same-run-id", "outcome": "test", "module": "x", "scope": {"write_paths": ["x"]}}
+        run_a = await call_with_token(claude_url, token_b, lambda s: s.call_tool("opsgate_init_run", {"request": same_id_request}))
+        run_b = await call_with_token(claude_url, token_b, lambda s: s.call_tool("opsgate_init_run", {"request": same_id_request}))
+        run_a_payload = json.loads(run_a.content[0].text)
+        run_b_payload = json.loads(run_b.content[0].text)
+        # (both calls use token_b since token_a was revoked above; the point is the *tenant_id*
+        # embedded in the returned run_dir, not which specific token made the call)
+        record("opsgate_init_run scopes the run directory under the caller's own tenant_id", run_a_payload.get("run_dir") == f"runs/{TENANT_B}/same-run-id")
+
+        decision_b = await call_with_token(claude_url, token_b, lambda s: s.call_tool("opsgate_record_decision", {"hitl_id": "HITL-shared-id-Q1", "answer": "tenant B's answer"}))
+        decision_b_payload = json.loads(decision_b.content[0].text)
+        record("opsgate_record_decision attributes the entry to the caller's own tenant_id", decision_b_payload.get("tenant_id") == TENANT_B)
+        decisions_log = ROOT_DIR / "runs" / TENANT_B / "decisions.pylog"
+        record("opsgate_record_decision writes to a tenant-scoped decisions.pylog, not a shared global one", decisions_log.exists())
+
         # --- Knowledge resources, shared across both mounts - checked via /mcp/replit ---
         hitl_resource = await call_with_token(replit_url, SHARED_TOKEN, lambda s: s.read_resource("opsgate://knowledge/hitl-protocol"))
         record("HITL protocol resource reachable under the full wired system", "Human-in-the-Loop" in hitl_resource.contents[0].text)
@@ -227,6 +244,7 @@ async def main():
                 tenants.delete_profile(tenant_id)
             except tenants.TenantError:
                 pass
+            shutil.rmtree(ROOT_DIR / "runs" / tenant_id, ignore_errors=True)
         proc.terminate()
         try:
             proc.wait(timeout=5)

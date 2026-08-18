@@ -271,14 +271,16 @@ def opsgate_init_state(request: dict) -> dict:
 @claude_tool(
     name="opsgate_init_run",
     description=(
-        "Create a runs/<request-id>/ directory on this server's own machine with the "
-        "request, its resolved route, initial gate result, and initial handoff state "
-        "persisted as files. Has a real side effect on disk under this project's runs/ "
-        "folder - only call this to actually start tracking a run, not to preview one."
+        "Create a runs/<tenant-id>/<request-id>/ directory on this server's own machine with "
+        "the request, its resolved route, initial gate result, and initial handoff state "
+        "persisted as files - scoped under the caller's own resolved tenant, so two tenants "
+        "can never collide on the same request id. Has a real side effect on disk under this "
+        "project's runs/ folder - only call this to actually start tracking a run, not to "
+        "preview one."
     ),
 )
 def opsgate_init_run(request: dict) -> dict:
-    return opsgate.init_run_result(request or {})
+    return opsgate.init_run_result(request or {}, tenant_id=_active_tenant_id())
 
 
 @claude_tool(
@@ -361,12 +363,14 @@ def opsgate_lint_prompt(prompt_markdown: str) -> dict:
     name="opsgate_record_decision",
     description=(
         "Persist a human's answer to a HITL decision (by its HITL-ID) to this server's own "
-        "runs/decisions.pylog, so the decision survives outside the current conversation. "
-        "Call this immediately after a human answers a HITL question, before resuming work."
+        "runs/<tenant-id>/decisions.pylog - scoped and attributed to the caller's own resolved "
+        "tenant, so one tenant's decisions never mix with another's - so the decision survives "
+        "outside the current conversation. Call this immediately after a human answers a HITL "
+        "question, before resuming work."
     ),
 )
 def opsgate_record_decision(hitl_id: str, answer: str) -> dict:
-    return opsgate.record_decision_result(hitl_id, answer)
+    return opsgate.record_decision_result(hitl_id, answer, tenant_id=_active_tenant_id())
 
 
 # ---------------------------------------------------------------------------

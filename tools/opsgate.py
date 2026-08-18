@@ -490,34 +490,49 @@ Resume from the next incomplete phase. Do not repeat completed discovery unless 
 _UNSAFE_RUN_ID_CHARS = re.compile(r"[^A-Za-z0-9_-]")
 
 
-def init_run_result(request):
+def init_run_result(request, tenant_id=None):
+    """`tenant_id` scopes the run under `runs/<tenant_id>/` - without this, every tenant wrote
+    into the same flat `runs/` namespace, so two tenants choosing (or colliding on) the same
+    `request["id"]` would silently overwrite each other's run. Defaults to
+    opsgate_tenants.LOCAL_DEV_TENANT_ID, matching every other tenant-aware *_result function."""
+    tenant_id = tenant_id or opsgate_tenants.LOCAL_DEV_TENANT_ID
     route = route_request(request)
     run_id = request.get("id") or f"REQ-{int(_dt.datetime.now().timestamp() * 1000)}"
     # request["id"] is caller-controlled (including over the MCP server) and used as a runs/
     # directory name below - strip anything but a single safe path segment's worth of
-    # characters so a value like "../../etc" can never resolve outside runs/.
+    # characters so a value like "../../etc" can never resolve outside runs/. tenant_id is
+    # already validated (a real registry key or the LOCAL_DEV_TENANT_ID constant) but gets the
+    # same treatment here rather than trusting that invariant to hold at every call site.
     safe_run_id = _UNSAFE_RUN_ID_CHARS.sub("_", str(run_id))
-    run_dir = ROOT_DIR / "runs" / safe_run_id
+    safe_tenant_id = _UNSAFE_RUN_ID_CHARS.sub("_", str(tenant_id))
+    run_dir = ROOT_DIR / "runs" / safe_tenant_id / safe_run_id
     run_dir.mkdir(parents=True, exist_ok=True)
     write_python_data(run_dir / "request.py", "REQUEST", request, "# Engine run request")
     write_python_data(run_dir / "route.py", "ROUTE", route, "# Engine run route")
     write_python_data(run_dir / "gate_result.py", "GATE_RESULT", {"request_id": run_id, "status": "blocked" if route.get("blocked") else "pending_preflight", "failed_gates": ["capability_gate"] if route.get("blocked") else [], "missing_authority": route.get("missing_authority") or []}, "# Engine run gate result")
     write_python_data(run_dir / "handoff.py", "HANDOFF", {"request_id": run_id, "completed": False, "next_phase_ready": False, "blockers": route.get("missing_authority") or [] if route.get("blocked") else []}, "# Engine run handoff")
-    result = {"run_id": run_id, "run_dir": str(run_dir.relative_to(ROOT_DIR))}
+    result = {"run_id": run_id, "tenant_id": tenant_id, "run_dir": str(run_dir.relative_to(ROOT_DIR))}
     if safe_run_id != str(run_id):
         result["run_dir_id_sanitized"] = True
     return result
 
 
 def cmd_init_run(argv):
+    tenant_id, argv = _extract_tenant_flag(argv)
     if not argv:
-        usage("Usage: python3 tools/opsgate.py init-run <request.json>")
-    print_json(init_run_result(load_request(argv[0])))
+        usage("Usage: python3 tools/opsgate.py init-run <request.json> [--tenant <id>]")
+    print_json(init_run_result(load_request(argv[0]), tenant_id=tenant_id))
 
 
-def record_decision_result(hitl_id, answer):
-    entry = {"recorded_at": _dt.datetime.now(_dt.timezone.utc).isoformat().replace("+00:00", "Z"), "id": hitl_id, "answer": answer}
-    decisions = ROOT_DIR / "runs" / "decisions.pylog"
+def record_decision_result(hitl_id, answer, tenant_id=None):
+    """`tenant_id` scopes which tenant's own `decisions.pylog` this gets appended to - without
+    this, every tenant shared one global log with no attribution, so any caller could append a
+    decision for a HITL-ID that looked like it belonged to a different tenant's task, with no
+    record of who actually wrote it. Defaults to opsgate_tenants.LOCAL_DEV_TENANT_ID."""
+    tenant_id = tenant_id or opsgate_tenants.LOCAL_DEV_TENANT_ID
+    safe_tenant_id = _UNSAFE_RUN_ID_CHARS.sub("_", str(tenant_id))
+    entry = {"recorded_at": _dt.datetime.now(_dt.timezone.utc).isoformat().replace("+00:00", "Z"), "id": hitl_id, "answer": answer, "tenant_id": tenant_id}
+    decisions = ROOT_DIR / "runs" / safe_tenant_id / "decisions.pylog"
     decisions.parent.mkdir(parents=True, exist_ok=True)
     with decisions.open("a", encoding="utf-8") as handle:
         handle.write(repr(entry) + "\n")
@@ -525,9 +540,10 @@ def record_decision_result(hitl_id, answer):
 
 
 def cmd_record_decision(argv):
+    tenant_id, argv = _extract_tenant_flag(argv)
     if len(argv) < 2:
-        usage("Usage: python3 tools/opsgate.py record-decision <HITL-ID> <answer and exact scope>")
-    print_json(record_decision_result(argv[0], " ".join(argv[1:])))
+        usage("Usage: python3 tools/opsgate.py record-decision <HITL-ID> <answer and exact scope> [--tenant <id>]")
+    print_json(record_decision_result(argv[0], " ".join(argv[1:]), tenant_id=tenant_id))
 
 
 def cmd_validate_json(argv):
