@@ -23,6 +23,7 @@ ROOT_INSTRUCTIONS_PATH = ROOT_DIR / "content" / "references" / "replit.md"
 AI_OBJECTS_ROOT = ROOT_DIR / "content" / "references" / "ai"
 SECURITY_RULES_PATH = AI_OBJECTS_ROOT / "security.md"
 REPLIT_SKILLS_ROOT = ROOT_DIR / "content" / "references" / "replit-skills"
+CLAUDE_MCP_WORKFLOW_PATH = ROOT_DIR / "content" / "references" / "CLAUDE_MCP_WORKFLOW.md"
 
 SCAFFOLDING_SECTIONS = {"activation"}
 
@@ -116,6 +117,17 @@ def ai_object_full_text(name):
 
 def security_rules_text():
     return instruction_object_text("security")
+
+
+def claude_mcp_workflow_text():
+    """The durable operating instructions for Claude acting as this engine's own prompt
+    compiler (the intake -> route -> compile -> init_run -> parse_report -> next_phase_prompt
+    chain) - unlike the replit-skills workflows below, this isn't about Replit's own
+    implementation work, it's about how Claude itself should call this server's tools. Kept as
+    an always-on resource for the same reason as hitl_protocol_text()/security_rules_text():
+    read live from its own source file, so a Claude session connected via the real MCP
+    connector gets this without installing anything - no plugin, no per-person skill upload."""
+    return CLAUDE_MCP_WORKFLOW_PATH.read_text(encoding="utf-8").strip()
 
 
 def list_skill_names():
@@ -214,11 +226,13 @@ def export_ruleset():
     return {
         "hitl_protocol": hitl_protocol_text(),
         "security_rules": security_rules_text(),
+        "claude_mcp_workflow": claude_mcp_workflow_text(),
         "skill_workflows": {skill: skill_workflow_text(skill) for skill in list_skill_names()},
         "instruction_objects": {name: instruction_object_text(name) for name in INSTRUCTION_OBJECT_NAMES},
         "sources": {
             "hitl_protocol": str(HITL_SPEC_PATH.relative_to(ROOT_DIR)),
             "security_rules": str(SECURITY_RULES_PATH.relative_to(ROOT_DIR)),
+            "claude_mcp_workflow": str(CLAUDE_MCP_WORKFLOW_PATH.relative_to(ROOT_DIR)),
             "skill_workflows": str(REPLIT_SKILLS_ROOT.relative_to(ROOT_DIR)) + "/<skill>/SKILL.md",
             "instruction_objects": str(AI_OBJECTS_ROOT.relative_to(ROOT_DIR)) + "/<name>.md",
         },

@@ -425,12 +425,23 @@ async def main():
         hitl_resource_via_claude = await call_with_token(claude_url, SHARED_TOKEN, lambda s: s.read_resource("opsgate://knowledge/hitl-protocol"))
         record("HITL protocol resource also reachable via /mcp/claude", "Human-in-the-Loop" in hitl_resource_via_claude.contents[0].text)
 
+        # --- Claude MCP workflow resource: Claude-only, unlike the shared ones above - this is
+        # the whole point of exposing it this way instead of a per-person plugin/skill upload.
+        claude_workflow_resource = await call_with_token(claude_url, SHARED_TOKEN, lambda s: s.read_resource("opsgate://knowledge/claude-mcp-workflow"))
+        record("Claude MCP workflow resource reachable via /mcp/claude with no plugin installed", "opsgate_intake_request" in claude_workflow_resource.contents[0].text)
+        claude_workflow_missing_on_replit = False
+        try:
+            await call_with_token(replit_url, SHARED_TOKEN, lambda s: s.read_resource("opsgate://knowledge/claude-mcp-workflow"))
+        except Exception:
+            claude_workflow_missing_on_replit = True
+        record("Claude MCP workflow resource is correctly absent from /mcp/replit (Replit doesn't need it)", claude_workflow_missing_on_replit)
+
         # --- Claude-only tools, via /mcp/claude ---
         export = await call_with_token(claude_url, SHARED_TOKEN, lambda s: s.call_tool("opsgate_export_ruleset", {}))
         export_payload = json.loads(export.content[0].text)
         record(
-            "opsgate_export_ruleset returns all three Phase 3 categories under the full wired system",
-            {"hitl_protocol", "security_rules", "skill_workflows", "instruction_objects"} <= export_payload.keys(),
+            "opsgate_export_ruleset returns all four categories under the full wired system",
+            {"hitl_protocol", "security_rules", "claude_mcp_workflow", "skill_workflows", "instruction_objects"} <= export_payload.keys(),
         )
 
         # --- Replit-only tools, via /mcp/replit ---

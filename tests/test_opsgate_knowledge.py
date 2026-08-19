@@ -156,9 +156,16 @@ def main():
         record(f"ai_object_full_text({name!r}) is byte-identical to source (unlike instruction_object_text)", full_out == source_full)
         record(f"ai_object_full_text({name!r}) keeps the Activation heading", bool(re.search(r"^##\s+Activation\s*$", full_out, re.M)))
 
+    claude_workflow_source = knowledge.CLAUDE_MCP_WORKFLOW_PATH.read_text(encoding="utf-8").strip()
+    claude_workflow_out = knowledge.claude_mcp_workflow_text()
+    record("claude_mcp_workflow_text is byte-identical to CLAUDE_MCP_WORKFLOW.md", claude_workflow_out == claude_workflow_source)
+    record("claude_mcp_workflow_text keeps the H1 title", claude_workflow_out.startswith("# OpsGate prompt-compiler workflow"))
+    record("claude_mcp_workflow_text names every tool in the chain", all(tool in claude_workflow_out for tool in ["opsgate_intake_request", "opsgate_route_request", "opsgate_preflight", "opsgate_compile_prompt", "opsgate_init_run", "opsgate_parse_report", "opsgate_next_phase_prompt", "opsgate_record_decision"]))
+
     ruleset = knowledge.export_ruleset()
     record("export_ruleset includes hitl_protocol", ruleset.get("hitl_protocol") == hitl_out)
     record("export_ruleset includes security_rules", ruleset.get("security_rules") == security_out)
+    record("export_ruleset includes claude_mcp_workflow", ruleset.get("claude_mcp_workflow") == claude_workflow_out)
     record(
         "export_ruleset includes every skill workflow",
         ruleset.get("skill_workflows") == {skill: knowledge.skill_workflow_text(skill) for skill in skill_names},
@@ -172,6 +179,7 @@ def main():
         ruleset.get("sources") == {
             "hitl_protocol": "content/specifications/HITL_SPEC.md",
             "security_rules": "content/references/ai/security.md",
+            "claude_mcp_workflow": "content/references/CLAUDE_MCP_WORKFLOW.md",
             "skill_workflows": "content/references/replit-skills/<skill>/SKILL.md",
             "instruction_objects": "content/references/ai/<name>.md",
         },

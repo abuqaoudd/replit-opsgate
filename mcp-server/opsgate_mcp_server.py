@@ -129,7 +129,11 @@ mcp_claude = FastMCP(
         "Tools for Claude acting as the prompt compiler for a Replit-hosted project: turn "
         "plain-language input into a routed, gate-checked request, compile it into a "
         "self-contained prompt for a Replit session, then parse that session's report back "
-        "into the next phase's prompt. See this engine's ADOPTION_GUIDE.md for the full chain."
+        "into the next phase's prompt. Read the opsgate://knowledge/claude-mcp-workflow "
+        "resource for the full numbered chain (intake -> route -> preflight -> compile -> "
+        "init_run -> hand off -> parse_report -> next_phase_prompt) before starting - this "
+        "is the operating manual for these tools, kept live on the server so it works the same "
+        "for every connected session with nothing to install."
     ),
 )
 for _app in (mcp_replit, mcp_claude):
@@ -402,6 +406,24 @@ def opsgate_hitl_protocol_resource() -> str:
 )
 def opsgate_security_rules_resource() -> str:
     return opsgate_knowledge.security_rules_text()
+
+
+@mcp_claude.resource(
+    "opsgate://knowledge/claude-mcp-workflow",
+    name="Claude MCP workflow",
+    description=(
+        "The operating manual for Claude acting as this engine's own prompt compiler: the "
+        "numbered intake -> route -> preflight -> compile -> init_run -> hand off -> "
+        "parse_report -> next_phase_prompt chain, plus the other tools available and the rules "
+        "for using them. Claude-only (not on /mcp/replit/) since this is about how Claude calls "
+        "these tools, not about Replit's own implementation work - see the skill-workflow "
+        "resource above for that. Read live from this server so every connected session gets "
+        "the current version with nothing to install."
+    ),
+    mime_type="text/markdown",
+)
+def opsgate_claude_mcp_workflow_resource() -> str:
+    return opsgate_knowledge.claude_mcp_workflow_text()
 
 
 @shared_resource(
