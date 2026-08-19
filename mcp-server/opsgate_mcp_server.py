@@ -78,6 +78,7 @@ sys.path.insert(0, str(ENGINE_TOOLS_DIR))
 
 import opsgate  # noqa: E402  (import must follow the sys.path fix-up above)
 import opsgate_knowledge  # noqa: E402
+import opsgate_oauth  # noqa: E402
 import opsgate_tenants  # noqa: E402
 
 try:
@@ -89,7 +90,7 @@ try:
     import uvicorn
     from starlette.applications import Starlette
     from starlette.responses import JSONResponse
-    from starlette.routing import Mount
+    from starlette.routing import Mount, Route
 except ImportError:
     sys.exit("The 'uvicorn'/'starlette' packages are not installed - they should come with 'mcp'. Run: pip install mcp")
 
@@ -503,27 +504,40 @@ def opsgate_sync_file(path: str) -> dict:
 # guessed or skipped.
 #
 # Deliberately a custom header (X-Opsgate-Token), not "Authorization: Bearer
-# <token>": Cloudflare's free, account-less "quick tunnels" (trycloudflare.com,
-# used by `cloudflared tunnel --url ...` with no login) reject any request
-# carrying an Authorization header at the edge - confirmed empirically (a
-# request with only that header back gets HTTP 421 "Invalid Host header"
-# straight from Cloudflare, never reaching this process; the identical request
-# with a custom header name passes through untouched). Presumably an anti-abuse
-# measure against using shared throwaway domains to relay stolen credentials.
-# A custom header carries the same secret with the same protection and isn't
-# subject to that block.
+# <token>", as the PRIMARY credential path: Cloudflare's free, account-less
+# "quick tunnels" (trycloudflare.com, used by `cloudflared tunnel --url ...`
+# with no login) reject any request carrying an Authorization header at the
+# edge - confirmed empirically (a request with only that header back gets
+# HTTP 421 "Invalid Host header" straight from Cloudflare, never reaching this
+# process; the identical request with a custom header name passes through
+# untouched). Presumably an anti-abuse measure against using shared throwaway
+# domains to relay stolen credentials. A custom header carries the same secret
+# with the same protection and isn't subject to that block.
+#
+# `Authorization: Bearer <token>` is ALSO accepted (opsgate_oauth.py's /token
+# endpoint hands back an existing X-Opsgate-Token value as an OAuth
+# access_token, and every OAuth client sends it back via this exact header -
+# that's not optional, it's the access-token transport OAuth 2.1 mandates).
+# This is safe here because the OAuth path is only ever meant to be exercised
+# through the Tailscale Funnel URL, not the Cloudflare quick tunnel above -
+# if that ever changes, the Cloudflare Authorization-header block would break
+# it the same way it would break any other Bearer-token caller.
 # ---------------------------------------------------------------------------
 
 AUTH_HEADER_NAME = b"x-opsgate-token"
+BEARER_HEADER_NAME = b"authorization"
 
 
 class TokenAuthMiddleware:
-    """Checks the X-Opsgate-Token header against the tenant store first - if it resolves to a
+    """Checks the X-Opsgate-Token header (or, failing that, an `Authorization: Bearer <token>`
+    header - see the OAuth comment above) against the tenant store first - if it resolves to a
     real tenant, that tenant governs this call (see _active_tenant_id() above) and the shared-
     secret check below is skipped entirely for this request. If it does not resolve to any
     tenant, this falls back to the single shared --token/OPSGATE_MCP_TOKEN secret, checked with
     the same constant-time comparison either way. A request that matches neither is rejected -
-    there is no path that skips authentication."""
+    there is no path that skips authentication, except opsgate_oauth.PUBLIC_PATHS: the OAuth
+    metadata/authorize/token endpoints themselves must be reachable with no credential, since
+    their entire job is to hand a caller its first credential."""
 
     def __init__(self, app, token):
         self.app = app
@@ -533,11 +547,22 @@ class TokenAuthMiddleware:
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
+        if scope.get("path") in opsgate_oauth.PUBLIC_PATHS:
+            await self.app(scope, receive, send)
+            return
         headers = dict(scope.get("headers") or [])
         supplied = headers.get(AUTH_HEADER_NAME, b"").decode("latin-1")
+        if not supplied:
+            bearer = headers.get(BEARER_HEADER_NAME, b"").decode("latin-1")
+            if bearer.lower().startswith("bearer "):
+                supplied = bearer[len("bearer "):].strip()
         tenant_id, _is_admin = opsgate_tenants.resolve_tenant_from_token(supplied)
         if tenant_id is None and not hmac.compare_digest(supplied, self.token):
-            response = JSONResponse({"error": f"unauthorized - missing or invalid {AUTH_HEADER_NAME.decode()} header"}, status_code=401)
+            response = JSONResponse(
+                {"error": f"unauthorized - missing or invalid {AUTH_HEADER_NAME.decode()} header"},
+                status_code=401,
+                headers={"WWW-Authenticate": f'Bearer resource_metadata="{opsgate_oauth.issuer_base_url()}/.well-known/oauth-protected-resource"'},
+            )
             await response(scope, receive, send)
             return
         reset_token = _current_tenant_id.set(tenant_id)
@@ -615,6 +640,10 @@ def main():
 
     root_app = Starlette(
         routes=[
+            Route("/.well-known/oauth-authorization-server", opsgate_oauth.oauth_authorization_server_metadata, methods=["GET"]),
+            Route("/.well-known/oauth-protected-resource", opsgate_oauth.oauth_protected_resource_metadata, methods=["GET"]),
+            Route("/authorize", opsgate_oauth.oauth_authorize, methods=["GET"]),
+            Route("/token", opsgate_oauth.oauth_token, methods=["POST"]),
             Mount("/mcp/replit", app=replit_app),
             Mount("/mcp/claude", app=claude_app),
         ],

@@ -13,6 +13,8 @@ Requires the mcp-server/.venv environment (see mcp-server/README.md).
 Run: mcp-server/.venv/bin/python3 tests/test_opsgate_mcp_integration.py
 """
 import asyncio
+import base64
+import hashlib
 import json
 import os
 import shutil
@@ -66,6 +68,77 @@ async def call_with_token(url, token, fn):
         async with ClientSession(read, write) as session:
             await session.initialize()
             return await fn(session)
+
+
+async def call_with_bearer_token(url, token, fn):
+    """Same as call_with_token, but via `Authorization: Bearer <token>` - the header transport
+    an OAuth access_token actually uses, distinct from this server's own X-Opsgate-Token."""
+    headers = {"Authorization": f"Bearer {token}"} if token else {}
+    async with streamablehttp_client(url, headers=headers) as (read, write, _get_session_id):
+        async with ClientSession(read, write) as session:
+            await session.initialize()
+            return await fn(session)
+
+
+def read_env_file(path):
+    """Same tiny KEY=VALUE parser opsgate_mcp_server.py's own _load_dotenv_if_present() uses -
+    duplicated rather than imported, since this test only needs to read a few OAuth values out
+    of the real mcp-server/.env to drive requests against the server, not the loader itself."""
+    values = {}
+    if not path.exists():
+        return values
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        values[key.strip()] = value.strip().strip('"').strip("'")
+    return values
+
+
+def pkce_pair():
+    verifier = base64.urlsafe_b64encode(os.urandom(32)).rstrip(b"=").decode("ascii")
+    challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode("ascii")).digest()).rstrip(b"=").decode("ascii")
+    return verifier, challenge
+
+
+async def oauth_authorize_and_exchange(base_url, client_id, client_secret, code_verifier=None, redirect_uri="https://claude.example/callback", state="test-state-123"):
+    """Drives the full /authorize -> /token round trip exactly as an OAuth client would -
+    real PKCE challenge/verifier pair unless one is deliberately overridden (the adversarial
+    wrong-verifier case below passes a different one than it authorized with)."""
+    import httpx
+
+    verifier, challenge = pkce_pair()
+    async with httpx.AsyncClient(follow_redirects=False) as client:
+        authorize_resp = await client.get(f"{base_url}/authorize", params={
+            "response_type": "code",
+            "client_id": client_id,
+            "redirect_uri": redirect_uri,
+            "state": state,
+            "code_challenge": challenge,
+            "code_challenge_method": "S256",
+        })
+        if authorize_resp.status_code != 302:
+            return {"authorize_status": authorize_resp.status_code}
+        location = httpx.URL(authorize_resp.headers.get("location", ""))
+        code = location.params.get("code")
+        token_resp = await client.post(f"{base_url}/token", data={
+            "grant_type": "authorization_code",
+            "code": code,
+            "redirect_uri": redirect_uri,
+            "code_verifier": code_verifier if code_verifier is not None else verifier,
+            "client_id": client_id,
+            "client_secret": client_secret,
+        })
+        return {
+            "authorize_status": authorize_resp.status_code,
+            "returned_state": location.params.get("state"),
+            "code": code,
+            "redirect_uri": redirect_uri,
+            "code_verifier": code_verifier if code_verifier is not None else verifier,
+            "token_status": token_resp.status_code,
+            "token_body": token_resp.json() if token_resp.headers.get("content-type", "").startswith("application/json") else token_resp.text,
+        }
 
 
 async def wait_until_ready(url, token, attempts=50, delay=0.2):
@@ -129,6 +202,109 @@ async def main():
 
         bad_token_status = await raw_post_status(replit_url, {"X-Opsgate-Token": "not-a-real-token-of-any-kind"})
         record("unknown/malformed token still gets 401 (no silent fallback)", bad_token_status == 401)
+
+        # --- OAuth 2.1 + PKCE wrapper (opsgate_oauth.py), for Claude's org-level custom-
+        # connector flow, which is OAuth-only. Uses the REAL configured client_id/secret/backing
+        # token from mcp-server/.env, same reasoning as testing against the real tenant
+        # registry above - the point is proving the exact credentials a real connector setup
+        # would use, not a synthetic stand-in for them.
+        #
+        # `base_url` is the actual local socket the test connects to; `expected_issuer` is what
+        # opsgate_oauth.issuer_base_url() should report given the REAL .env's own config
+        # (OPSGATE_MCP_ALLOWED_HOSTS is already set there to the real Tailscale hostname, so the
+        # metadata correctly advertises that URL, not this test's local 127.0.0.1 socket -
+        # replicated here rather than assumed, so this test reflects whatever .env actually says).
+        base_url = f"http://127.0.0.1:{port}"
+        oauth_env = read_env_file(SERVER_DIR / ".env")
+        oauth_client_id = oauth_env.get("OPSGATE_OAUTH_CLIENT_ID")
+        oauth_client_secret = oauth_env.get("OPSGATE_OAUTH_CLIENT_SECRET")
+        oauth_backing_token = oauth_env.get("OPSGATE_OAUTH_BACKING_TOKEN")
+        allowed_hosts = [h.strip() for h in oauth_env.get("OPSGATE_MCP_ALLOWED_HOSTS", "").split(",") if h.strip()]
+        expected_issuer = (oauth_env.get("OPSGATE_OAUTH_ISSUER_BASE_URL") or (f"https://{allowed_hosts[0]}" if allowed_hosts else base_url)).rstrip("/")
+        # If .env pins a real redirect_uri (it does - see opsgate_oauth.py's module docstring),
+        # every happy-path round trip below must use that exact value or /authorize would reject
+        # it; fall back to a synthetic one only when nothing is pinned yet.
+        pinned_redirect_uri = oauth_env.get("OPSGATE_OAUTH_ALLOWED_REDIRECT_URI")
+        test_redirect_uri = pinned_redirect_uri or "https://claude.example/callback"
+        if not (oauth_client_id and oauth_client_secret and oauth_backing_token):
+            record("OAuth env vars configured in mcp-server/.env", False, "OPSGATE_OAUTH_CLIENT_ID/SECRET/BACKING_TOKEN missing - skipped every OAuth check below")
+        else:
+            import httpx
+
+            async with httpx.AsyncClient() as client:
+                as_metadata = (await client.get(f"{base_url}/.well-known/oauth-authorization-server")).json()
+                pr_metadata = (await client.get(f"{base_url}/.well-known/oauth-protected-resource")).json()
+            record(
+                "OAuth authorization-server metadata advertises the configured issuer's /authorize and /token",
+                as_metadata.get("authorization_endpoint") == f"{expected_issuer}/authorize" and as_metadata.get("token_endpoint") == f"{expected_issuer}/token",
+                f"expected issuer {expected_issuer}, got {as_metadata}",
+            )
+            record(
+                "OAuth protected-resource metadata names the configured issuer as its own authorization server",
+                pr_metadata.get("authorization_servers") == [expected_issuer],
+                f"expected issuer {expected_issuer}, got {pr_metadata}",
+            )
+
+            round_trip = await oauth_authorize_and_exchange(base_url, oauth_client_id, oauth_client_secret, redirect_uri=test_redirect_uri)
+            record("OAuth /authorize redirects (302) with a code", round_trip.get("authorize_status") == 302)
+            record("OAuth /authorize echoes back the caller's own state param unmodified", round_trip.get("returned_state") == "test-state-123")
+            record("OAuth /token exchange succeeds (200) with a valid PKCE verifier", round_trip.get("token_status") == 200)
+            issued_access_token = round_trip.get("token_body", {}).get("access_token") if isinstance(round_trip.get("token_body"), dict) else None
+            record(
+                "OAuth access_token IS the configured backing token - tenant resolution is unaffected by this wrapper",
+                issued_access_token == oauth_backing_token,
+            )
+
+            if issued_access_token:
+                bearer_profile = await call_with_bearer_token(claude_url, issued_access_token, lambda s: s.call_tool("opsgate_show_profile", {"request": {}}))
+                bearer_profile_payload = json.loads(bearer_profile.content[0].text)
+                record(
+                    "the OAuth-issued access_token authenticates a real tool call via Authorization: Bearer",
+                    bool(bearer_profile_payload.get("resolved_profile")),
+                )
+
+            # --- Adversarial: a code_verifier that doesn't match the original code_challenge
+            # must be rejected, not silently accepted (this is the entire security property
+            # PKCE exists to provide - an intercepted `code` alone must be useless).
+            wrong_verifier_result = await oauth_authorize_and_exchange(base_url, oauth_client_id, oauth_client_secret, code_verifier="this-does-not-match-the-challenge", redirect_uri=test_redirect_uri)
+            record("OAuth /token rejects a code_verifier that doesn't match its code_challenge", wrong_verifier_result.get("token_status") == 400)
+
+            # --- Adversarial: wrong client credentials must be rejected outright ---
+            async with httpx.AsyncClient() as client:
+                bad_client_resp = await client.post(f"{base_url}/token", data={"grant_type": "authorization_code", "code": "irrelevant", "redirect_uri": test_redirect_uri, "code_verifier": "irrelevant", "client_id": "not-the-real-client-id", "client_secret": "not-the-real-client-secret"})
+                bad_authorize_resp = await client.get(f"{base_url}/authorize", params={"response_type": "code", "client_id": "not-the-real-client-id", "redirect_uri": test_redirect_uri, "code_challenge": "x", "code_challenge_method": "S256"})
+            record("OAuth /token rejects a request with the wrong client_id/secret", bad_client_resp.status_code == 401)
+            record("OAuth /authorize rejects a request with the wrong client_id", bad_authorize_resp.status_code == 401)
+
+            # --- Pinned redirect_uri (OPSGATE_OAUTH_ALLOWED_REDIRECT_URI): once set, /authorize
+            # must reject anything else, closing the open-redirect gap left open when unset.
+            if pinned_redirect_uri:
+                async with httpx.AsyncClient() as client:
+                    mismatched_redirect_resp = await client.get(f"{base_url}/authorize", params={"response_type": "code", "client_id": oauth_client_id, "redirect_uri": "https://not-the-pinned-uri.example/callback", "code_challenge": "x", "code_challenge_method": "S256"})
+                record("OAuth /authorize rejects a redirect_uri other than the pinned OPSGATE_OAUTH_ALLOWED_REDIRECT_URI", mismatched_redirect_resp.status_code == 400)
+
+            # --- Adversarial: replaying an already-redeemed code must fail (single-use) ---
+            replayed = await oauth_authorize_and_exchange(base_url, oauth_client_id, oauth_client_secret, redirect_uri=test_redirect_uri)
+            record("first redemption of a fresh code succeeds, setting up the replay check", replayed.get("token_status") == 200)
+            async with httpx.AsyncClient() as client:
+                replay_resp = await client.post(f"{base_url}/token", data={
+                    "grant_type": "authorization_code",
+                    "code": replayed.get("code"),
+                    "redirect_uri": replayed.get("redirect_uri"),
+                    "code_verifier": replayed.get("code_verifier"),
+                    "client_id": oauth_client_id,
+                    "client_secret": oauth_client_secret,
+                })
+            record("OAuth /token rejects replaying an already-redeemed code", replay_resp.status_code == 400)
+
+            # --- Discovery header: an unauthenticated 401 must point a real OAuth client at
+            # where to actually go, per RFC 9728's resource-metadata discovery convention.
+            async with httpx.AsyncClient() as client:
+                no_auth_full = await client.post(claude_url, headers={"Content-Type": "application/json", "Accept": "text/event-stream, application/json"}, content="{}")
+            record(
+                "a 401 response's WWW-Authenticate header points at the configured issuer's protected-resource metadata",
+                f'resource_metadata="{expected_issuer}/.well-known/oauth-protected-resource"' in no_auth_full.headers.get("www-authenticate", ""),
+            )
 
         # --- Set up two real tenants in the REAL registry the running server reads ---
         tenants.create_profile(TENANT_A, frontend_root="acme-client/src", backend_root="acme-server/src", extra_never_access=["acme-secrets/**"])

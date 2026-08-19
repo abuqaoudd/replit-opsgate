@@ -88,6 +88,41 @@ each time.
 
 A request without a valid token gets `401 {"error": "unauthorized - missing or invalid x-opsgate-token header"}`.
 
+### OAuth (for Claude's org-level "custom connector" flow)
+
+Claude's own org-level Connectors feature (`claude.ai/customize/connectors`, distinct from a
+Claude Code plugin's `.mcp.json`) is OAuth-only - there is no field for a static header there.
+`opsgate_oauth.py` adds a minimal OAuth 2.1 + PKCE authorization server, just enough to satisfy
+that flow, alongside the `X-Opsgate-Token` model above - not a replacement for it. Its
+`/token` endpoint doesn't mint a new kind of credential: a successful, PKCE-verified code
+exchange hands back one of this server's own existing `X-Opsgate-Token` values
+(`OPSGATE_OAUTH_BACKING_TOKEN`) as the OAuth `access_token`, and `TokenAuthMiddleware` accepts
+that value via `Authorization: Bearer <token>` exactly as it would via the custom header - so
+tenant resolution above is completely unaffected by which path a caller used to get the token.
+
+Setup: generate a client id/secret (`python3 -c "import secrets; print(secrets.token_urlsafe(16))"`
+for the id, `secrets.token_urlsafe(32)` for the secret), set `OPSGATE_OAUTH_CLIENT_ID`,
+`OPSGATE_OAUTH_CLIENT_SECRET`, and `OPSGATE_OAUTH_BACKING_TOKEN` (an existing tenant token) in
+`.env`, then paste the name/URL/client id/secret into Claude's "Add connector" form - no
+Dynamic Client Registration (RFC 7591) is implemented or required; Claude's form registers a
+static client ahead of time. Endpoints exposed at the server root (not under either `/mcp/*`
+mount, since a caller has no credential yet when reaching them): `/.well-known/oauth-
+authorization-server`, `/.well-known/oauth-protected-resource`, `/authorize`, `/token`.
+
+Set `OPSGATE_OAUTH_ALLOWED_REDIRECT_URI` to pin `/authorize` to one known `redirect_uri`,
+closing an open-redirect surface that otherwise exists (consistency between `/authorize` and
+`/token` is still enforced either way - a code can only be redeemed with the exact
+`redirect_uri` it was issued for). For Claude's own org-level connector flow, the confirmed
+real value - from a live connector setup, not documentation - is
+`https://claude.ai/api/mcp/auth_callback`.
+
+**Verified live against a real Claude org-level connector** (2026-08-19): added it through
+Claude's actual "Add connector" UI with the credentials above, watched the real request
+sequence land in this server's log (`GET /.well-known/oauth-protected-resource` → `GET
+/.well-known/oauth-authorization-server` → `GET /authorize?...redirect_uri=https%3A%2F%2Fclaude.ai%2Fapi%2Fmcp%2Fauth_callback...`
+→ `POST /token`), and confirmed a real tool call (`opsgate_show_profile`) through the connector
+returned real `metco` tenant data - not a simulated/curl-only test.
+
 ## Which project's profile it answers for
 
 Every request resolves to exactly one tenant, by identity, not by cwd or environment variable:
@@ -193,8 +228,15 @@ actually names, not all of them unconditionally.
   confirmed to land in the right place.
 - `tests/test_opsgate_mcp_integration.py` re-runs this against the real running server on
   every change: the legacy shared-secret path, two real tenants' isolation (including a
-  revoked token failing closed immediately), every resource/the export tool above, and the
+  revoked token failing closed immediately), every resource/the export tool above, the
   two-mount split itself (each mount lists exactly its own tools, the 5 shared ones appear on
   both, the same tenant token resolves identically regardless of which mount it's used
-  against) - all over genuine MCP protocol calls rather than direct Python calls. Requires
-  this directory's `.venv`; run with `mcp-server/.venv/bin/python3 tests/test_opsgate_mcp_integration.py`.
+  against), and the full OAuth round trip (metadata discovery, `/authorize` → `/token` with a
+  real PKCE challenge/verifier, the issued `access_token` authenticating a real tool call via
+  `Authorization: Bearer`, plus the adversarial cases: wrong client credentials, a mismatched
+  PKCE verifier, and replaying an already-redeemed code) - all over genuine MCP protocol calls
+  rather than direct Python calls. Requires this directory's `.venv`; run with
+  `mcp-server/.venv/bin/python3 tests/test_opsgate_mcp_integration.py`.
+- `tests/test_opsgate_oauth.py` unit-tests `opsgate_oauth.py`'s PKCE/credential-matching logic
+  directly (no running server needed, but still requires this directory's `.venv` for
+  `starlette`): run with `mcp-server/.venv/bin/python3 tests/test_opsgate_oauth.py`.
