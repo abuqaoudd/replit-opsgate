@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Isolation and adversarial-case tests for the multi-tenant profile store
 (opsgate_tenants.py): two tenants never leak into each other, a revoked token loses access
-immediately, a non-admin cross-tenant override attempt is rejected, and a malformed/unknown
-tenant ID fails closed rather than falling back to a default.
+immediately, a non-admin cross-tenant override attempt is rejected, a malformed/unknown
+tenant ID fails closed rather than falling back to a default, and a tenant's mcp_enabled flag
+correctly switches opsgate.compile_prompt_text()'s HITL gate language without requiring every
+caller to pass request["mcp"]["enabled"] itself.
 
 Standalone, not yet wired into test-all.py. Uses an isolated temp registry file so it never
 touches or depends on a real tenants/registry.json.
@@ -19,6 +21,7 @@ TESTS_DIR = Path(__file__).resolve().parent
 ROOT_DIR = TESTS_DIR.parent
 sys.path.insert(0, str(ROOT_DIR / "tools"))
 
+import opsgate  # noqa: E402  (same module instance opsgate_tenants.py's redirected REGISTRY_PATH below reaches, since sys.path/module caching are shared)
 import opsgate_tenants as tenants  # noqa: E402
 
 RESULTS = []
@@ -122,6 +125,26 @@ def main():
         record(
             "concurrent issue_token calls for different tenants under a widened race window all persist (no lost update)",
             all(tenants.resolve_tenant(issued.get(race_tenant)) == race_tenant for race_tenant in race_tenants),
+        )
+
+        # --- mcp_enabled tenant flag: compile_prompt_text should switch to the "call these
+        # tools directly" gate language automatically for a tenant whose Replit project has
+        # real MCP tools registered, without every caller needing to remember to pass
+        # request["mcp"]["enabled"] itself on every single compile call.
+        mcp_request = {"id": "REQ-MCP-FLAG", "deliverable": "replit_prompt", "outcome": "test", "module": "x", "scope": {"write_paths": ["client/src/x"]}}
+        record(
+            "a tenant with no mcp_enabled flag gets the manual prose HITL gate by default",
+            "MCP mode" not in opsgate.compile_prompt_text(mcp_request, tenant_id="acme"),
+        )
+        tenants.update_profile("acme", mcp_enabled=True)
+        record(
+            "setting mcp_enabled=True on a tenant's profile switches compile_prompt_text to MCP-mode gate language with no per-request flag needed",
+            "MCP mode" in opsgate.compile_prompt_text(mcp_request, tenant_id="acme"),
+        )
+        override_request = {**mcp_request, "mcp": {"enabled": False}}
+        record(
+            "an explicit request-level mcp.enabled always overrides the tenant's own default, in either direction",
+            "MCP mode" not in opsgate.compile_prompt_text(override_request, tenant_id="acme"),
         )
 
     failed = [name for name, passed, _ in RESULTS if not passed]

@@ -174,6 +174,14 @@ def cmd_preflight(argv):
 def compile_prompt_text(request, tenant_id=None):
     tenant_id = tenant_id or opsgate_tenants.LOCAL_DEV_TENANT_ID
     route = route_request(request, tenant_id=tenant_id)
+    # A caller-supplied request["mcp"] always wins (including an explicit {"enabled": False} to
+    # force the manual prose gate even for an mcp_enabled tenant) - this only fills in a default
+    # when the caller didn't say anything, from the resolved tenant's own profile. Without this,
+    # every single compile call for a tenant whose Replit project genuinely has these MCP tools
+    # registered would need to remember to pass mcp.enabled itself, every time, forever - a
+    # property of the tenant's real setup, not something to re-specify per request.
+    if "mcp" not in request and (opsgate_tenants.get_profile(tenant_id) or {}).get("mcp_enabled"):
+        request = {**request, "mcp": {"enabled": True}}
     if route.get("deliverable") == "replit_prompt":
         protected_paths = opsgate_tenants.protected_paths_for_tenant(tenant_id)
         prompt = compile_replit_prompt(request, route, protected_paths=protected_paths)
