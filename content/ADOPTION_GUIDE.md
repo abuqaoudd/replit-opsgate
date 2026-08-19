@@ -60,10 +60,12 @@ tenants.create_profile(
     backend_root="server/src",
     extra_never_access=["legacy-service/**"],  # optional, on top of the universal baseline
 )
-token = tenants.issue_token("acme")  # returned once, in plaintext - deliver it to the tenant
+token = tenants.issue_token("acme", label="replit-connector")  # returned once, in plaintext - deliver it to the tenant
 ```
 
 That's the whole setup. Give the tenant its token; they set it as the `X-Opsgate-Token` header value when connecting to this engine's MCP server (Replit's "Connect via MCP" custom-header config, or any MCP client that supports custom headers). Every gate/routing tool call they make resolves against `"acme"`'s own profile and protected paths automatically - no local file, no copy step, no rebuild.
+
+`label` is optional but worth setting on every token you issue: a short, non-secret note on what that specific token is *for* (e.g. `"replit-connector"`, `"oauth-backing"`, `"ci-pipeline"`). Never used for authorization - purely so `tenants.list_tokens("acme")` can answer "what is this token actually used for" later, instead of a guess. Mint a separate, distinctly-labeled token per consumer rather than handing the same one to two different callers - a token is a single on/off switch, and revoking one revokes every consumer relying on that exact string, with no warning that anything else was riding along.
 
 Add a second tenant the same way, any time, without touching the first. `update_profile()` changes an existing tenant's roots/protected paths; `issue_token()`/`revoke_token()` manage credentials independently of profile data.
 

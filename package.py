@@ -1,7 +1,7 @@
 # Engine package metadata stored as Python.
 
 PACKAGE = {'name': 'opsgate-engine-foundation',
- 'version': '7.0.0',
+ 'version': '7.1.0',
  'private': True,
  'type': 'module',
  'scripts': {'validate': 'python3 tools/opsgate.py validate-engine',

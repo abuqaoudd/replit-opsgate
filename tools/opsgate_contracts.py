@@ -1,8 +1,8 @@
 # Generated engine contracts (OpsGate). Edit this file instead of standalone JSON manifests.
 
 ENGINE_MANIFEST = {'name': 'opsgate',
- 'version': '7.0.0',
- 'release_date': '2026-08-17',
+ 'version': '7.1.0',
+ 'release_date': '2026-08-19',
  'source_version': '7',
  'purpose': 'Governance engine for AI coding agents building Replit-hosted projects - Replit doing the '
             'implementation, Claude (or any other MCP-capable client) compiling the governed prompts it '

@@ -14,6 +14,15 @@ TokenAuthMiddleware accepts that same value via either header (X-Opsgate-Token o
 Authorization: Bearer), so nothing about tenant resolution changes - this is a thin
 authorization-flow wrapper in front of the existing token model, not a replacement for it.
 
+OPSGATE_OAUTH_BACKING_TOKEN must be a token dedicated to this one purpose - mint it with
+opsgate_tenants.issue_token(tenant_id, label="oauth-backing") rather than reusing a token
+already handed to some other consumer (a plugin, a CLI header config, a launchctl-set env var).
+A token is a single on/off switch: revoking it revokes every consumer relying on that exact
+string, with no warning that anything else was riding along. This was not a hypothetical -
+this exact deployment's backing token was originally the same token a since-retired plugin
+used directly, discovered only when revoking the plugin's token was about to also cut off the
+live OAuth connector (see CHANGELOG.md, 2026-08-19).
+
 OPSGATE_OAUTH_ALLOWED_REDIRECT_URI pins /authorize to one known redirect_uri, closing an
 open-redirect surface that would otherwise exist (accepting any caller-supplied redirect_uri on
 /authorize, relying only on /token's requirement that it match exactly what /authorize was

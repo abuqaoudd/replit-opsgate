@@ -34,9 +34,6 @@ unpinned `pip install mcp` would install a version this file cannot run against.
 
 ## Run
 
-From the outer project's root (the project that vendors this engine as a
-submodule) - this matters for external profile config resolution, see below:
-
 ```
 python3 <engine-dir>/mcp-server/opsgate_mcp_server.py --host 127.0.0.1 --port 8765
 ```
@@ -63,6 +60,38 @@ Agent until it's exposed through a tunnel (ngrok, Cloudflare Tunnel, Tailscale
 Funnel, etc.) and that tunnel's public HTTPS URL is registered in Replit's
 "Connect via MCP" settings (pointed at the `/mcp/replit/` path specifically).
 That's a separate step from just running this file.
+
+## Process supervision
+
+Running the command above directly (or via `nohup ... & disown`) means nothing restarts it if
+it ever crashes - it just stays down until someone notices. `mcp-server/com.opsgate.mcpserver.plist`
+is a `launchd` LaunchAgent that keeps it running: starts it on login (`RunAtLoad`) and restarts
+it on any exit (`KeepAlive`), with a 10-second `ThrottleInterval` so a crash loop doesn't spin
+the CPU. Logs go to `~/Library/Logs/opsgate-mcp-server.log` (a stable location, unlike `/tmp`,
+which can be cleared on reboot).
+
+Install:
+
+```bash
+cp mcp-server/com.opsgate.mcpserver.plist ~/Library/LaunchAgents/
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.opsgate.mcpserver.plist
+```
+
+Uninstall (stop and remove the supervised service - does not touch anything else, tenant data
+included):
+
+```bash
+launchctl bootout gui/$(id -u)/com.opsgate.mcpserver
+rm ~/Library/LaunchAgents/com.opsgate.mcpserver.plist
+```
+
+After editing `opsgate_mcp_server.py`, `opsgate_oauth.py`, any file under `tools/`, or
+`mcp-server/.env`, the running process still needs a restart to pick up the change (Python
+doesn't hot-reload, and `.env` is only read once at startup) - with the LaunchAgent installed,
+that's `launchctl kickstart -k gui/$(id -u)/com.opsgate.mcpserver` instead of manually killing
+and re-launching the process; `KeepAlive` brings it straight back up. The plist file itself
+(`mcp-server/com.opsgate.mcpserver.plist`) is only read at `bootstrap`/`load` time - editing it
+requires `bootout` then `bootstrap` again, not `kickstart`, for the change to take effect.
 
 ## Authentication
 
@@ -101,9 +130,12 @@ that value via `Authorization: Bearer <token>` exactly as it would via the custo
 tenant resolution above is completely unaffected by which path a caller used to get the token.
 
 Setup: generate a client id/secret (`python3 -c "import secrets; print(secrets.token_urlsafe(16))"`
-for the id, `secrets.token_urlsafe(32)` for the secret), set `OPSGATE_OAUTH_CLIENT_ID`,
-`OPSGATE_OAUTH_CLIENT_SECRET`, and `OPSGATE_OAUTH_BACKING_TOKEN` (an existing tenant token) in
-`.env`, then paste the name/URL/client id/secret into Claude's "Add connector" form - no
+for the id, `secrets.token_urlsafe(32)` for the secret), issue a **dedicated** tenant token for
+`OPSGATE_OAUTH_BACKING_TOKEN` (`opsgate_tenants.issue_token(tenant_id, label="oauth-backing")`
+- never reuse a token some other consumer already has, since revoking one revokes both with no
+warning; `opsgate_tenants.list_tokens(tenant_id)` shows every token's label so this is checkable
+later), set `OPSGATE_OAUTH_CLIENT_ID`/`OPSGATE_OAUTH_CLIENT_SECRET`/`OPSGATE_OAUTH_BACKING_TOKEN`
+in `.env`, then paste the name/URL/client id/secret into Claude's "Add connector" form - no
 Dynamic Client Registration (RFC 7591) is implemented or required; Claude's form registers a
 static client ahead of time. Endpoints exposed at the server root (not under either `/mcp/*`
 mount, since a caller has no credential yet when reaching them): `/.well-known/oauth-

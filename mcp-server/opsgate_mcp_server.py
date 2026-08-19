@@ -59,10 +59,14 @@ once to stderr at startup. See `mcp-server/README.md` for details.
 import argparse
 import contextlib
 import contextvars
+import datetime
+import functools
 import hmac
+import json
 import os
 import secrets
 import sys
+import time
 from pathlib import Path
 
 SERVER_DIR = Path(__file__).resolve().parent
@@ -142,22 +146,23 @@ for _app in (mcp_replit, mcp_claude):
 
 def replit_tool(**kwargs):
     def decorator(fn):
-        return mcp_replit.tool(**kwargs)(fn)
+        return mcp_replit.tool(**kwargs)(_audit_wrap(fn))
 
     return decorator
 
 
 def claude_tool(**kwargs):
     def decorator(fn):
-        return mcp_claude.tool(**kwargs)(fn)
+        return mcp_claude.tool(**kwargs)(_audit_wrap(fn))
 
     return decorator
 
 
 def shared_tool(**kwargs):
     def decorator(fn):
-        mcp_claude.tool(**kwargs)(fn)
-        return mcp_replit.tool(**kwargs)(fn)
+        wrapped = _audit_wrap(fn)
+        mcp_claude.tool(**kwargs)(wrapped)
+        return mcp_replit.tool(**kwargs)(wrapped)
 
     return decorator
 
@@ -186,6 +191,54 @@ _current_tenant_id = contextvars.ContextVar("_current_tenant_id", default=None)
 
 def _active_tenant_id():
     return _current_tenant_id.get() or opsgate_tenants.LOCAL_DEV_TENANT_ID
+
+
+# ---------------------------------------------------------------------------
+# Structured per-tool-call audit log. Uvicorn's own access log (opsgate-mcp-server.log once
+# the LaunchAgent is installed) shows "POST /mcp/claude/ 200 OK" for every call regardless of
+# which opsgate_* tool actually ran - real diagnosis (e.g. "is a given tenant's connector
+# actually calling anything") needs the tool name, and that only exists one layer up, inside
+# the MCP request body uvicorn's access log never parses. Wrapping every tool function here
+# (once, at registration time, via replit_tool/claude_tool/shared_tool above) gets that for
+# free, with zero changes needed inside any individual tool's own body.
+#
+# Append-only, no rotation - same reasoning as decisions.pylog (opsgate.py): an audit trail is
+# supposed to keep growing, not get silently truncated. runs/ is already entirely gitignored,
+# so this file never needs its own separate ignore entry.
+# ---------------------------------------------------------------------------
+
+AUDIT_LOG_PATH = ENGINE_TOOLS_DIR.parent / "runs" / "audit.jsonl"
+
+
+def _log_audit_entry(tenant_id, tool_name, success, duration_ms, error=None):
+    entry = {
+        "at": datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z"),
+        "tenant_id": tenant_id,
+        "tool": tool_name,
+        "success": success,
+        "duration_ms": round(duration_ms, 1),
+    }
+    if error is not None:
+        entry["error"] = error[:500]
+    AUDIT_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with AUDIT_LOG_PATH.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(entry) + "\n")
+
+
+def _audit_wrap(fn):
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        tenant_id = _active_tenant_id()
+        started = time.monotonic()
+        try:
+            result = fn(*args, **kwargs)
+        except Exception as exc:
+            _log_audit_entry(tenant_id, fn.__name__, False, (time.monotonic() - started) * 1000, error=str(exc))
+            raise
+        _log_audit_entry(tenant_id, fn.__name__, True, (time.monotonic() - started) * 1000)
+        return result
+
+    return wrapper
 
 
 # ---------------------------------------------------------------------------
@@ -550,6 +603,26 @@ AUTH_HEADER_NAME = b"x-opsgate-token"
 BEARER_HEADER_NAME = b"authorization"
 
 
+async def health_check(request):
+    """Unauthenticated on purpose - a liveness/readiness probe needs to be checkable without a
+    credential, and reveals nothing sensitive (no tenant list, no roots, no tokens). Checks the
+    one piece of persistent state that can actually fail independently of the process being up
+    at all: that tenants/registry.json is present and parses, so "the process answers HTTP" and
+    "the tenant store this whole server depends on is intact" are distinguishable instead of
+    both silently looking like "it's fine" until the first real tool call fails."""
+    try:
+        opsgate_tenants.list_profiles()
+    except Exception as exc:
+        return JSONResponse({"status": "degraded", "error": str(exc)}, status_code=503)
+    return JSONResponse({"status": "ok"})
+
+
+# Public (no-credential-required) paths: the OAuth metadata/authorize/token endpoints (a caller
+# has no credential yet when reaching them - that's their whole job) plus /health (a liveness
+# probe needs to be checkable without one).
+PUBLIC_PATHS = opsgate_oauth.PUBLIC_PATHS | {"/health"}
+
+
 class TokenAuthMiddleware:
     """Checks the X-Opsgate-Token header (or, failing that, an `Authorization: Bearer <token>`
     header - see the OAuth comment above) against the tenant store first - if it resolves to a
@@ -557,9 +630,7 @@ class TokenAuthMiddleware:
     secret check below is skipped entirely for this request. If it does not resolve to any
     tenant, this falls back to the single shared --token/OPSGATE_MCP_TOKEN secret, checked with
     the same constant-time comparison either way. A request that matches neither is rejected -
-    there is no path that skips authentication, except opsgate_oauth.PUBLIC_PATHS: the OAuth
-    metadata/authorize/token endpoints themselves must be reachable with no credential, since
-    their entire job is to hand a caller its first credential."""
+    there is no path that skips authentication, except PUBLIC_PATHS above."""
 
     def __init__(self, app, token):
         self.app = app
@@ -569,7 +640,7 @@ class TokenAuthMiddleware:
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
-        if scope.get("path") in opsgate_oauth.PUBLIC_PATHS:
+        if scope.get("path") in PUBLIC_PATHS:
             await self.app(scope, receive, send)
             return
         headers = dict(scope.get("headers") or [])
@@ -662,6 +733,7 @@ def main():
 
     root_app = Starlette(
         routes=[
+            Route("/health", health_check, methods=["GET"]),
             Route("/.well-known/oauth-authorization-server", opsgate_oauth.oauth_authorization_server_metadata, methods=["GET"]),
             Route("/.well-known/oauth-protected-resource", opsgate_oauth.oauth_protected_resource_metadata, methods=["GET"]),
             Route("/authorize", opsgate_oauth.oauth_authorize, methods=["GET"]),

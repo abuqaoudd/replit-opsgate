@@ -88,6 +88,19 @@ def main():
         record("list_profiles never exposes token_hashes", "token_hashes" not in tenants.list_profiles()["acme"])
         record("get_profile never exposes token_hashes", "token_hashes" not in tenants.get_profile("acme"))
 
+        # --- Token labels: operator-facing metadata for "what is this specific token for",
+        # so two different consumers never end up silently sharing one token by accident.
+        labeled_token = tenants.issue_token("acme", label="ci-pipeline")
+        unlabeled_token = tenants.issue_token("acme")
+        acme_tokens = tenants.list_tokens("acme")
+        record("list_tokens reflects a token's label", any(entry.get("label") == "ci-pipeline" for entry in acme_tokens))
+        record("list_tokens reports label=None for a token issued with no label", any(entry.get("label") is None for entry in acme_tokens))
+        record("list_tokens never exposes a token hash", all("hash" not in entry for entry in acme_tokens))
+        record("list_tokens on an unknown tenant raises, not returns an empty list", expect_raises(tenants.list_tokens, "does-not-exist"))
+        record("a labeled token still resolves and authenticates normally", tenants.resolve_tenant(labeled_token) == "acme")
+        tenants.revoke_token(labeled_token)
+        tenants.revoke_token(unlabeled_token)
+
         # --- Concurrency: the registry's read-modify-write cycle must not lose a write to a
         # race. Without _locked_registry(), two near-simultaneous issue_token() calls for
         # different tenants could each load the registry before the other saves, and whichever

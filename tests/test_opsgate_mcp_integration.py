@@ -203,6 +203,14 @@ async def main():
         bad_token_status = await raw_post_status(replit_url, {"X-Opsgate-Token": "not-a-real-token-of-any-kind"})
         record("unknown/malformed token still gets 401 (no silent fallback)", bad_token_status == 401)
 
+        # --- /health: unauthenticated on purpose (a liveness probe needs to be checkable with
+        # no credential), and must not require one even though every other route in this file does.
+        import httpx
+
+        async with httpx.AsyncClient() as client:
+            health_resp = await client.get(f"http://127.0.0.1:{port}/health")
+        record("GET /health requires no credential and reports ok", health_resp.status_code == 200 and health_resp.json().get("status") == "ok")
+
         # --- OAuth 2.1 + PKCE wrapper (opsgate_oauth.py), for Claude's org-level custom-
         # connector flow, which is OAuth-only. Uses the REAL configured client_id/secret/backing
         # token from mcp-server/.env, same reasoning as testing against the real tenant
@@ -398,10 +406,28 @@ async def main():
         oversized_answer = await call_with_token(claude_url, token_b, lambda s: s.call_tool("opsgate_record_decision", {"hitl_id": "HITL-oversized-Q1", "answer": "x" * 6000}))
         record("opsgate_record_decision rejects an oversized answer instead of writing it", bool(oversized_answer.isError))
 
+        # --- Structured audit log (runs/audit.jsonl): every tool call, successful or not,
+        # should leave a matching entry attributing tenant_id + tool name + outcome - this is
+        # what actually distinguishes "which tool did this tenant call" from uvicorn's own
+        # access log, which only ever shows "POST /mcp/claude/ 200 OK" regardless of which
+        # opsgate_* tool ran inside that one HTTP request.
+        AUDIT_LOG_PATH = ROOT_DIR / "runs" / "audit.jsonl"
+        audit_probe = await call_with_token(claude_url, token_b, lambda s: s.call_tool("opsgate_show_profile", {"request": {}}))
+        success_entry = json.loads(AUDIT_LOG_PATH.read_text(encoding="utf-8").splitlines()[-1])
+        record(
+            "a successful tool call leaves a matching audit-log entry (tenant, tool, success)",
+            success_entry.get("tenant_id") == TENANT_B and success_entry.get("tool") == "opsgate_show_profile" and success_entry.get("success") is True,
+        )
+
         # A hitl_id used to have no shape requirement at all - any string got appended to
         # decisions.pylog as if it were a valid, attributable decision.
         malformed_id_decision = await call_with_token(claude_url, token_b, lambda s: s.call_tool("opsgate_record_decision", {"hitl_id": "not-a-hitl-id-at-all", "answer": "some answer"}))
         record("opsgate_record_decision rejects a hitl_id that doesn't match the required HITL id shape", bool(malformed_id_decision.isError))
+        failure_entry = json.loads(AUDIT_LOG_PATH.read_text(encoding="utf-8").splitlines()[-1])
+        record(
+            "a failing tool call leaves a matching audit-log entry with success=False and an error message",
+            failure_entry.get("tenant_id") == TENANT_B and failure_entry.get("tool") == "opsgate_record_decision" and failure_entry.get("success") is False and bool(failure_entry.get("error")),
+        )
 
         # Unlike decisions.pylog (an intentionally unbounded append-only log), opsgate_init_run
         # creates a brand-new directory with several files per call and had no size cap at all -

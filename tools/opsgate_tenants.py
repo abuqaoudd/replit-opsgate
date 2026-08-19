@@ -188,18 +188,39 @@ def _public_profile(entry):
     return {key: value for key, value in entry.items() if key != "token_hashes"}
 
 
-def issue_token(tenant_id, admin=False):
+def issue_token(tenant_id, admin=False, label=None):
     """Generates a new secret token, stores only its hash, and returns the plaintext token
     exactly once - the caller is responsible for delivering it to the tenant; this module never
-    logs or persists it in recoverable form."""
+    logs or persists it in recoverable form.
+
+    `label` is a free-text, non-secret note on what this specific token is *for* (e.g.
+    "oauth-backing", "claude-code-direct", "replit-connector") - never used for authorization,
+    purely operator-facing via list_tokens() below. Exists because a token silently doing double
+    duty for two different consumers is a real, easy-to-make mistake with a real consequence:
+    revoking one consumer's access revokes the other's too, with no warning. A label doesn't
+    prevent that by itself, but it makes "what is this token actually used for" answerable at a
+    glance instead of a guess - mint a separate, distinctly-labeled token per consumer rather
+    than handing the same one to two different callers."""
     with _locked_registry() as registry:
         entry = registry["tenants"].get(tenant_id)
         if entry is None:
             raise TenantError(f"unknown tenant {tenant_id!r}")
         token = secrets.token_urlsafe(32)
-        entry.setdefault("token_hashes", []).append({"hash": _hash_token(token), "admin": bool(admin)})
+        entry.setdefault("token_hashes", []).append({"hash": _hash_token(token), "admin": bool(admin), "label": label})
         _save_registry(registry)
     return token
+
+
+def list_tokens(tenant_id):
+    """Non-secret metadata (label, admin) for every token currently issued to a tenant - never
+    the hash itself, which stays exactly as unreachable as it already was via get_profile()/
+    list_profiles(). For auditing "what tokens exist and what is each one actually for," the
+    exact question that would have caught a token doing accidental double duty before it caused
+    a real problem."""
+    entry = _load_registry()["tenants"].get(tenant_id)
+    if entry is None:
+        raise TenantError(f"unknown tenant {tenant_id!r}")
+    return [{"label": record.get("label"), "admin": bool(record.get("admin"))} for record in entry.get("token_hashes", [])]
 
 
 def revoke_token(token):

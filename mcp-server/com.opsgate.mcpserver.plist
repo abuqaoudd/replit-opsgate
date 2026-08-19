@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  launchd LaunchAgent for opsgate_mcp_server.py, so it survives a crash and starts on login
+  instead of relying on someone noticing it's down and manually running the old
+  `nohup ... & disown` command again.
+
+  This is the canonical, versioned copy of this file. It is NOT read from here by launchd -
+  install it into ~/Library/LaunchAgents/ (see mcp-server/README.md's "Process supervision"
+  section for the install/uninstall commands) and launchd reads that copy. Re-copy and reload
+  after editing this file for a change to actually take effect.
+
+  Hardcoded absolute paths throughout, matching every other piece of this deployment
+  (mcp-server/.env's OPSGATE_MCP_ALLOWED_HOSTS, this repo's docs mentioning the real Tailscale
+  hostname directly) - this is a single-operator, single-machine deployment, not a portable
+  template.
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.opsgate.mcpserver</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/mohammad-abuqaoud/replit-opsgate/mcp-server/.venv/bin/python3</string>
+        <string>/Users/mohammad-abuqaoud/replit-opsgate/mcp-server/opsgate_mcp_server.py</string>
+        <string>--port</string>
+        <string>8765</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>/Users/mohammad-abuqaoud/replit-opsgate/mcp-server</string>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>ThrottleInterval</key>
+    <integer>10</integer>
+    <key>StandardOutPath</key>
+    <string>/Users/mohammad-abuqaoud/Library/Logs/opsgate-mcp-server.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/mohammad-abuqaoud/Library/Logs/opsgate-mcp-server.log</string>
+</dict>
+</plist>
