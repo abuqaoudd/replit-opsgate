@@ -5,6 +5,12 @@ prompt for a Replit Agent, then read its report back. Replit sessions do not per
 between prompts - each one is a fresh session with no memory of this conversation or of any
 earlier Replit session - so this workflow exists to carry state across that gap from this side.
 
+**Only start this chain when the user is actually describing or requesting implementation work on
+a Replit-hosted project, or explicitly invokes the opsgate/Replit workflow (e.g. via
+`/opsgate-workflow`).** These tools being connected is not itself a reason to call them - for any
+other request (general questions, unrelated tasks, other projects), ignore this workflow entirely
+and respond normally.
+
 ## The chain
 
 1. If the user described what they want in plain language, call `opsgate_intake_request` first

@@ -1,5 +1,35 @@
 # Changelog
 
+## Unreleased
+
+### Stop the Claude MCP workflow from firing on unrelated requests - 2026-08-20
+
+- **Problem**: once the org-level Connector (or a `claude mcp add` connection) is live, its
+  `instructions` field and the always-fetched `opsgate://knowledge/claude-mcp-workflow` resource
+  read as a standing mandate ("use these tools to turn a plain-language request into a governed
+  prompt") rather than something conditional - Claude was starting the intake/route/compile
+  chain for requests that had nothing to do with a Replit-hosted project, across every connected
+  surface (Claude Code, claude.ai/Claude Desktop chat, Cowork).
+- **Fix, server-side (applies to every client, no install needed)**: rescoped `mcp_claude`'s
+  `instructions` field (`mcp-server/opsgate_mcp_server.py`) and the opening of
+  `content/references/CLAUDE_MCP_WORKFLOW.md` to state explicitly that the chain only starts
+  when the user is actually describing/requesting work on a Replit-hosted project or explicitly
+  invokes the workflow - the tools being connected is never itself a reason to call them.
+- **Fix, explicit trigger (Claude Code only)**: added `.claude/skills/opsgate-workflow/SKILL.md`,
+  a project skill with `disable-model-invocation: true` - never auto-triggered or loaded into
+  context by topic match, only runs on a deliberate `/opsgate-workflow` invocation, restoring the
+  explicit-trigger UX the retired Cowork plugin's bundled skill used to provide. Its body just
+  points at the live `opsgate://knowledge/claude-mcp-workflow` resource rather than duplicating
+  the chain, so there is still exactly one source of truth for the workflow steps.
+- claude.ai chat has no slash-command/skill mechanism, so the server-side rescoping is the only
+  lever there; Cowork *does* support plugin-bundled skills, but re-adding one would reintroduce
+  the per-person plugin-install problem `bbb7a8d` deliberately eliminated - left as an open
+  question rather than done unilaterally.
+- Full suite re-run clean after this change: `validate-engine` 0 warnings, `test-all` 58/58,
+  `test_opsgate_tenants.py` 28/28, `test_opsgate_knowledge.py` 228/228, `test_opsgate_oauth.py`
+  19/19, `test_opsgate_mcp_integration.py` 51/51. Restarted and verified live via a real
+  `opsgate_show_profile` call through the connector post-restart.
+
 ## 7.1.0 - post-migration hardening, real OAuth support, and operational maturity - 2026-08-19
 
 Minor version bump - every entry below is additive or corrective (nothing changed a tool's

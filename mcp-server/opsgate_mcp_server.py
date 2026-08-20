@@ -130,10 +130,14 @@ mcp_replit = FastMCP(
 mcp_claude = FastMCP(
     name="opsgate-claude",
     instructions=(
-        "Tools for Claude acting as the prompt compiler for a Replit-hosted project: turn "
-        "plain-language input into a routed, gate-checked request, compile it into a "
-        "self-contained prompt for a Replit session, then parse that session's report back "
-        "into the next phase's prompt. Read the opsgate://knowledge/claude-mcp-workflow "
+        "Tools for Claude acting as the prompt compiler for a Replit-hosted project. Only use "
+        "this tool chain when the user is actually describing or requesting implementation work "
+        "on such a project, or explicitly invokes the opsgate/Replit workflow (e.g. via "
+        "/opsgate-workflow) - never for unrelated questions, general conversation, or other "
+        "projects; having these tools connected is not itself a reason to call them. When it "
+        "does apply: turn plain-language input into a routed, gate-checked request, compile it "
+        "into a self-contained prompt for a Replit session, then parse that session's report "
+        "back into the next phase's prompt. Read the opsgate://knowledge/claude-mcp-workflow "
         "resource for the full numbered chain (intake -> route -> preflight -> compile -> "
         "init_run -> hand off -> parse_report -> next_phase_prompt) before starting - this "
         "is the operating manual for these tools, kept live on the server so it works the same "
