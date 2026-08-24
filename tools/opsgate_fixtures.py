@@ -83,7 +83,74 @@ ROUTING_FIXTURES = [{'path': 'fixtures/routing/business-request.json',
                        'outcome': 'Audit the Roles module against the approved business file without changing code.',
                        'module': 'Roles',
                        'scope': {'read_paths': ['src/features/roles/**']}},
-           'expected': {'deliverable': 'audit', 'artifact_mode': 'EVIDENCE_AUDIT', 'execution_shape': 'bounded'}}}]
+           'expected': {'deliverable': 'audit', 'artifact_mode': 'EVIDENCE_AUDIT', 'execution_shape': 'bounded'}}},
+ {'path': 'fixtures/routing/specification-request.json',
+  # Regression coverage for compile_artifact_prompt's "specification" body - previously
+  # untested by any fixture (only replit_prompt/business_file/audit deliverables had one),
+  # despite specification being one of the six artifact routes.
+  'data': {'request': {'id': 'REQ-FIXTURE-SPEC-001',
+                       'deliverable': 'specification',
+                       'outcome': 'Write an implementation-ready specification documenting the API contracts and '
+                                  'state transitions for the Suppliers module.',
+                       'module': 'Suppliers'},
+           'expected': {'deliverable': 'specification',
+                        'artifact_mode': 'IMPLEMENTATION_SPECIFICATION',
+                        'execution_shape': 'bounded'}}},
+ {'path': 'fixtures/routing/specification-bare-delta-word.json',
+  # Regression coverage for a real false-positive: is_delta_spec used to match the bare word
+  # "delta" anywhere in module/outcome text, so a request about an unrelated module literally
+  # named "Delta" (or containing a phrase like "delta-neutral") wrongly got the delta-spec
+  # compiled body instead of the ordinary full-spec one. Tightened to require the two-word
+  # phrase "delta spec"/"delta specification" - this fixture's module name alone must not
+  # trigger it.
+  'data': {'request': {'id': 'REQ-FIXTURE-SPEC-BARE-DELTA-001',
+                       'deliverable': 'specification',
+                       'module': 'Delta',
+                       'outcome': 'Write a specification for the Delta module reporting pipeline.'},
+           'expected': {'deliverable': 'specification',
+                        'artifact_mode': 'IMPLEMENTATION_SPECIFICATION',
+                        'execution_shape': 'bounded'}}},
+ {'path': 'fixtures/routing/specification-delta-request.json',
+  # Regression coverage for the delta-spec compiled body - locks in that a request whose
+  # module/outcome mentions "delta" gets the Summary-of-Changes/D-*/Acceptance-Criteria-Addendum
+  # structure real delta specs use, not the generic full-spec body.
+  'data': {'request': {'id': 'REQ-FIXTURE-SPEC-DELTA-001',
+                       'deliverable': 'specification',
+                       'module': 'Suppliers',
+                       'outcome': 'Produce a delta specification documenting what changed in the Suppliers module '
+                                  'business rules since the last approved revision.'},
+           'expected': {'deliverable': 'specification',
+                        'artifact_mode': 'IMPLEMENTATION_SPECIFICATION',
+                        'execution_shape': 'bounded'}}},
+ {'path': 'fixtures/routing/open-capability-explicit-false.json',
+  # Regression coverage for a real check_capabilities_result/route_request divergence: an
+  # explicit authorized:false on a capability whose gate default is NOT "blocked" (here
+  # ordinary_application_change, default allowed_when_scoped) must not block the request either
+  # way - only a capability whose own gate defaults to "blocked" requires explicit
+  # authorized:true. Before the fix, route_request (and therefore preflight) blocked this while
+  # check_capabilities_result did not, so the same request got two different verdicts.
+  'data': {'request': {'id': 'REQ-FIXTURE-OPEN-CAP-001',
+                       'deliverable': 'replit_prompt',
+                       'outcome': 'Fix a small display bug in the login form.',
+                       'module': 'Login',
+                       'scope': {'write_paths': ['src/features/login/**']},
+                       'authorizations': {'ordinary_application_change': {'authorized': False}}},
+           'expected': {'blocked': False, 'execution_shape': 'bounded'}}},
+ {'path': 'fixtures/routing/malformed-authorization-value.json',
+  # Regression coverage for a real crash: capability_authorized() used to call .get() on
+  # whatever an authorizations entry held without checking it was actually a dict first - a
+  # caller sending `{"schema_migration_backfill": true}` (a bare boolean, an easy typo for
+  # `{"authorized": true}`) raised an unhandled AttributeError from route_request/
+  # check_capabilities_result/preflight, since neither this data nor the request as a whole is
+  # validated against REQUEST_SCHEMA before reaching routing. Must fail closed (blocked/not
+  # authorized), never crash.
+  'data': {'request': {'id': 'REQ-FIXTURE-MALFORMED-AUTH-001',
+                       'deliverable': 'replit_prompt',
+                       'outcome': 'Run a schema migration to add the new column.',
+                       'module': 'Schema',
+                       'scope': {'write_paths': ['x']},
+                       'authorizations': {'schema_migration_backfill': True}},
+           'expected': {'blocked': True, 'execution_shape': 'phased'}}}]
 
 HITL_FIXTURES = [{'path': 'fixtures/hitl/case-1-missing-next-step.json',
   'data': {'id': 'HITL-vendor-approval-P1-Q1',

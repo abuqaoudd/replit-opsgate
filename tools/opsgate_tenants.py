@@ -231,7 +231,10 @@ def revoke_token(token):
         target_hash = _hash_token(token)
         for entry in registry["tenants"].values():
             before = len(entry.get("token_hashes", []))
-            entry["token_hashes"] = [record for record in entry.get("token_hashes", []) if record["hash"] != target_hash]
+            # hmac.compare_digest for consistency with resolve_tenant_from_token()'s identical
+            # hash-lookup, not because a plain != here is exploitable (comparing hashes, not
+            # secrets, same reasoning that function's own comment gives).
+            entry["token_hashes"] = [record for record in entry.get("token_hashes", []) if not hmac.compare_digest(record["hash"], target_hash)]
             if len(entry["token_hashes"]) != before:
                 _save_registry(registry)
                 return

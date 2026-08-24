@@ -42,12 +42,19 @@ TENANT_B = "integration-globex"
 REPLIT_TOOLS = {
     "opsgate_show_profile", "opsgate_check_capability", "opsgate_check_paths", "opsgate_preflight",
     "opsgate_record_decision", "opsgate_sync_instructions", "opsgate_sync_file",
+    "opsgate_list_own_tokens", "opsgate_issue_own_token", "opsgate_revoke_own_token", "opsgate_list_audit_log",
+    "opsgate_admin_create_tenant", "opsgate_admin_list_tenants", "opsgate_admin_issue_token", "opsgate_admin_revoke_token",
+    "opsgate_quota_usage",
 }
 CLAUDE_TOOLS = {
     "opsgate_show_profile", "opsgate_check_capability", "opsgate_check_paths", "opsgate_preflight",
-    "opsgate_record_decision", "opsgate_route_request", "opsgate_init_state", "opsgate_init_run",
+    "opsgate_record_decision", "opsgate_route_request", "opsgate_init_run",
     "opsgate_compile_prompt", "opsgate_next_phase_prompt", "opsgate_intake_request",
     "opsgate_parse_report", "opsgate_lint_report", "opsgate_lint_prompt", "opsgate_export_ruleset",
+    "opsgate_list_own_tokens", "opsgate_issue_own_token", "opsgate_revoke_own_token", "opsgate_list_audit_log",
+    "opsgate_list_runs", "opsgate_get_run",
+    "opsgate_admin_create_tenant", "opsgate_admin_list_tenants", "opsgate_admin_issue_token", "opsgate_admin_revoke_token",
+    "opsgate_quota_usage",
 }
 
 
@@ -187,9 +194,18 @@ async def main():
         claude_list = await call_with_token(claude_url, SHARED_TOKEN, lambda s: s.list_tools())
         replit_names = {t.name for t in replit_list.tools}
         claude_names = {t.name for t in claude_list.tools}
-        record("/mcp/replit lists exactly the 7 Replit-facing tools", replit_names == REPLIT_TOOLS, f"got {sorted(replit_names)}")
-        record("/mcp/claude lists exactly the 15 Claude-facing tools", claude_names == CLAUDE_TOOLS, f"got {sorted(claude_names)}")
-        record("the 5 shared gate/profile/decision tools appear on both mounts", (REPLIT_TOOLS & CLAUDE_TOOLS) == {"opsgate_show_profile", "opsgate_check_capability", "opsgate_check_paths", "opsgate_preflight", "opsgate_record_decision"})
+        record("/mcp/replit lists exactly the 16 Replit-facing tools", replit_names == REPLIT_TOOLS, f"got {sorted(replit_names)}")
+        record("/mcp/claude lists exactly the 25 Claude-facing tools", claude_names == CLAUDE_TOOLS, f"got {sorted(claude_names)}")
+        record(
+            "the 14 shared gate/profile/decision/token/audit/admin/quota tools appear on both mounts",
+            (REPLIT_TOOLS & CLAUDE_TOOLS) == {
+                "opsgate_show_profile", "opsgate_check_capability", "opsgate_check_paths", "opsgate_preflight",
+                "opsgate_record_decision", "opsgate_list_own_tokens", "opsgate_issue_own_token",
+                "opsgate_revoke_own_token", "opsgate_list_audit_log",
+                "opsgate_admin_create_tenant", "opsgate_admin_list_tenants", "opsgate_admin_issue_token",
+                "opsgate_admin_revoke_token", "opsgate_quota_usage",
+            },
+        )
 
         # --- Legacy shared-secret path still works, unaffected by the tenant store existing ---
         legacy_profile = await call_with_token(replit_url, SHARED_TOKEN, lambda s: s.call_tool("opsgate_show_profile", {"request": {}}))
@@ -340,6 +356,50 @@ async def main():
         profile_a_via_claude = await show_profile(token_a, url=claude_url)
         record("tenant A's token resolves the same profile via /mcp/claude too", profile_a_via_claude.get("resolved_profile") == TENANT_A)
 
+        # --- Session-identity regression: with stateless_http, every request must resolve
+        # identity purely from its own token, never from a reused/fabricated Mcp-Session-Id.
+        # Before stateless_http was set, a stateful session's tool calls executed inside a
+        # task spawned once at session-creation time - Python contextvars don't propagate
+        # across tasks, so a later request's own TokenAuthMiddleware-set identity had no
+        # effect on that task, and the SDK's own "session reusable only by its creating
+        # credential" guard never activated here (it requires a real auth provider populating
+        # scope["user"], which this server does not use). A request presenting someone else's
+        # (or a fabricated) Mcp-Session-Id must resolve strictly to ITS OWN token's tenant.
+        import httpx as _httpx
+
+        async def call_raw_with_session_header(url, token, session_id):
+            async with _httpx.AsyncClient() as client:
+                payload = {"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "opsgate_show_profile", "arguments": {"request": {}}}}
+                response = await client.post(
+                    url,
+                    headers={
+                        "X-Opsgate-Token": token,
+                        "Mcp-Session-Id": session_id,
+                        "Content-Type": "application/json",
+                        "Accept": "application/json, text/event-stream",
+                    },
+                    content=json.dumps(payload),
+                )
+                return response
+
+        foreign_session_resp = await call_raw_with_session_header(claude_url, token_b, "0" * 32)
+        # The body is SSE-framed ("event: message\ndata: <json-rpc envelope>") and the tool's
+        # own JSON result is itself a string inside that envelope - parse both layers rather
+        # than substring-matching raw text, which would need to account for double-escaped
+        # quotes and is fragile against unrelated formatting changes.
+        foreign_session_resolved_profile = None
+        try:
+            data_line = next(line for line in foreign_session_resp.text.splitlines() if line.startswith("data: "))
+            envelope = json.loads(data_line[len("data: "):])
+            foreign_session_resolved_profile = json.loads(envelope["result"]["content"][0]["text"]).get("resolved_profile")
+        except (StopIteration, KeyError, IndexError, json.JSONDecodeError):
+            pass
+        record(
+            "a fabricated/foreign Mcp-Session-Id does not change which tenant a request resolves to",
+            foreign_session_resp.status_code == 200 and foreign_session_resolved_profile == TENANT_B,
+            f"status={foreign_session_resp.status_code} resolved_profile={foreign_session_resolved_profile!r} body={foreign_session_resp.text[:300]}",
+        )
+
         # --- Tenant-id threading regression: opsgate_route_request must resolve the CALLER's own
         # tenant profile_roots (a real bug once silently fell back to local-dev's None/None roots
         # regardless of which tenant's token authenticated the call).
@@ -435,6 +495,147 @@ async def main():
         oversized_run = await call_with_token(claude_url, token_b, lambda s: s.call_tool("opsgate_init_run", {"request": {"id": "oversized-run", "outcome": "x" * 60000, "module": "x", "scope": {"write_paths": ["x"]}}}))
         record("opsgate_init_run rejects an oversized request instead of writing it to disk", bool(oversized_run.isError))
         record("opsgate_init_run's size rejection left no directory behind", not (ROOT_DIR / "runs" / TENANT_B / "oversized-run").exists())
+
+        # --- Self-service token lifecycle, tenant-scoped run introspection, and tenant-scoped
+        # audit-log reading - the three new tool groups added to close the "MCP-exposed tenant
+        # provisioning"/"observability"/"run recovery" gaps flagged in the tool audit. token_a
+        # was deliberately revoked above for the earlier adversarial case, so a fresh token is
+        # issued here for tenant A rather than reusing it.
+        token_a2 = tenants.issue_token(TENANT_A)
+
+        own_tokens_b = await call_with_token(claude_url, token_b, lambda s: s.call_tool("opsgate_list_own_tokens", {}))
+        own_tokens_b_payload = json.loads(own_tokens_b.content[0].text)
+        record("opsgate_list_own_tokens returns the caller's own tenant_id", own_tokens_b_payload.get("tenant_id") == TENANT_B)
+
+        issued = await call_with_token(claude_url, token_b, lambda s: s.call_tool("opsgate_issue_own_token", {"label": "integration-test-rotated"}))
+        issued_payload = json.loads(issued.content[0].text)
+        new_token_b = issued_payload.get("token")
+        record("opsgate_issue_own_token mints a usable new token for the caller's own tenant", bool(new_token_b))
+
+        own_tokens_b_after = await call_with_token(claude_url, token_b, lambda s: s.call_tool("opsgate_list_own_tokens", {}))
+        own_tokens_b_after_payload = json.loads(own_tokens_b_after.content[0].text)
+        record(
+            "the newly issued token appears in opsgate_list_own_tokens, labeled and non-admin",
+            any(t.get("label") == "integration-test-rotated" and t.get("admin") is False for t in own_tokens_b_after_payload.get("tokens", [])),
+        )
+
+        cross_tenant_revoke = await call_with_token(claude_url, token_a2, lambda s: s.call_tool("opsgate_revoke_own_token", {"token": new_token_b}))
+        record("opsgate_revoke_own_token rejects a token belonging to a different tenant", bool(cross_tenant_revoke.isError))
+        still_valid_status = await raw_post_status(replit_url, {"X-Opsgate-Token": new_token_b})
+        record("a token a different tenant failed to revoke is still valid", still_valid_status != 401)
+
+        own_revoke = await call_with_token(claude_url, token_b, lambda s: s.call_tool("opsgate_revoke_own_token", {"token": new_token_b}))
+        record("opsgate_revoke_own_token succeeds for the caller's own token", not bool(own_revoke.isError))
+        revoked_status = await raw_post_status(replit_url, {"X-Opsgate-Token": new_token_b})
+        record("the token is actually revoked after opsgate_revoke_own_token", revoked_status == 401)
+
+        run_list_b = await call_with_token(claude_url, token_b, lambda s: s.call_tool("opsgate_list_runs", {}))
+        run_list_b_payload = json.loads(run_list_b.content[0].text)
+        record(
+            "opsgate_list_runs lists the caller's own tenant's run (same-run-id, created earlier)",
+            any(r.get("run_id") == "same-run-id" for r in run_list_b_payload.get("runs", [])),
+        )
+        run_list_a = await call_with_token(claude_url, token_a2, lambda s: s.call_tool("opsgate_list_runs", {}))
+        run_list_a_payload = json.loads(run_list_a.content[0].text)
+        # Checked both directions, not just "B's specific run_id is absent" - a bug that leaked
+        # a THIRD tenant's run into A's response (not B's) would pass the narrower check but
+        # fail this one, since the response is only ever supposed to be attributed to A.
+        record(
+            "opsgate_list_runs does not leak tenant B's run to tenant A, and is attributed to A",
+            run_list_a_payload.get("tenant_id") == TENANT_A
+            and not any(r.get("run_id") == "same-run-id" for r in run_list_a_payload.get("runs", [])),
+        )
+
+        got_run_b = await call_with_token(claude_url, token_b, lambda s: s.call_tool("opsgate_get_run", {"run_id": "same-run-id"}))
+        got_run_b_payload = json.loads(got_run_b.content[0].text)
+        record("opsgate_get_run returns the caller's own tenant's run detail", got_run_b_payload.get("request", {}).get("id") == "same-run-id")
+        got_run_a_cross = await call_with_token(claude_url, token_a2, lambda s: s.call_tool("opsgate_get_run", {"run_id": "same-run-id"}))
+        record("opsgate_get_run rejects a run_id belonging to a different tenant", bool(got_run_a_cross.isError))
+
+        audit_b = await call_with_token(claude_url, token_b, lambda s: s.call_tool("opsgate_list_audit_log", {}))
+        audit_b_payload = json.loads(audit_b.content[0].text)
+        audit_b_entries = audit_b_payload.get("entries", [])
+        record(
+            "opsgate_list_audit_log returns only the caller's own tenant's entries, and at least one",
+            len(audit_b_entries) > 0 and all(e.get("tenant_id") == TENANT_B for e in audit_b_entries),
+        )
+        audit_a = await call_with_token(claude_url, token_a2, lambda s: s.call_tool("opsgate_list_audit_log", {}))
+        audit_a_payload = json.loads(audit_a.content[0].text)
+        audit_a_entries = audit_a_payload.get("entries", [])
+        # Checked both directions, matching the rigor of the B-side check above - every entry
+        # returned must actually be A's own, not merely "missing one specific B entry" (which
+        # a leak of some OTHER tenant's entry would still pass).
+        record(
+            "opsgate_list_audit_log does not leak tenant B's activity to tenant A, and every entry is A's own",
+            all(e.get("tenant_id") == TENANT_A for e in audit_a_entries)
+            and not any(e.get("tool") == "opsgate_issue_own_token" for e in audit_a_entries),
+        )
+
+        # --- Quota visibility (no enforcement) ---
+        quota_b = await call_with_token(claude_url, token_b, lambda s: s.call_tool("opsgate_quota_usage", {}))
+        quota_b_payload = json.loads(quota_b.content[0].text)
+        record(
+            "opsgate_quota_usage reports the caller's own tenant_id and a non-empty tool breakdown",
+            quota_b_payload.get("tenant_id") == TENANT_B and quota_b_payload.get("total_calls_recorded", 0) > 0,
+        )
+        quota_a = await call_with_token(claude_url, token_a2, lambda s: s.call_tool("opsgate_quota_usage", {}))
+        quota_a_payload = json.loads(quota_a.content[0].text)
+        record(
+            "opsgate_quota_usage does not leak tenant B's call counts into tenant A's report, and is attributed to A",
+            quota_a_payload.get("tenant_id") == TENANT_A
+            and "opsgate_issue_own_token" not in quota_a_payload.get("calls_by_tool", {}),
+        )
+
+        # --- Admin-gated tenant provisioning: opsgate_admin_create_tenant/list_tenants/
+        # issue_token/revoke_token. admin_token_a (issued above with admin=True) is the only
+        # token in this test flagged admin - every non-admin token must be rejected outright.
+        TENANT_C = "integration-admin-provisioned"
+        non_admin_create = await call_with_token(claude_url, token_b, lambda s: s.call_tool("opsgate_admin_create_tenant", {"tenant_id": TENANT_C}))
+        record("opsgate_admin_create_tenant rejects a non-admin token", bool(non_admin_create.isError))
+
+        non_admin_list = await call_with_token(claude_url, token_b, lambda s: s.call_tool("opsgate_admin_list_tenants", {}))
+        record("opsgate_admin_list_tenants rejects a non-admin token", bool(non_admin_list.isError))
+
+        # opsgate_admin_issue_token is the single most privilege-sensitive admin tool (mints a
+        # token for any tenant, optionally admin-flagged itself) - its non-admin rejection had
+        # no test coverage, unlike its three siblings above/below.
+        non_admin_issue = await call_with_token(claude_url, token_b, lambda s: s.call_tool("opsgate_admin_issue_token", {"tenant_id": TENANT_A, "label": "should-never-be-minted"}))
+        record("opsgate_admin_issue_token rejects a non-admin token", bool(non_admin_issue.isError))
+
+        try:
+            admin_created = await call_with_token(claude_url, admin_token_a, lambda s: s.call_tool("opsgate_admin_create_tenant", {"tenant_id": TENANT_C, "frontend_root": "admin-provisioned/src"}))
+            record("opsgate_admin_create_tenant succeeds for an admin token", not bool(admin_created.isError))
+
+            admin_list = await call_with_token(claude_url, admin_token_a, lambda s: s.call_tool("opsgate_admin_list_tenants", {}))
+            admin_list_payload = json.loads(admin_list.content[0].text)
+            record(
+                "opsgate_admin_list_tenants sees every tenant, not just the admin's own",
+                {TENANT_A, TENANT_B, TENANT_C} <= set(admin_list_payload.get("tenants", {}).keys()),
+            )
+
+            # An admin token issuing a token for a DIFFERENT tenant than its own - the whole
+            # point of opsgate_admin_issue_token over the self-service opsgate_issue_own_token.
+            admin_issued = await call_with_token(claude_url, admin_token_a, lambda s: s.call_tool("opsgate_admin_issue_token", {"tenant_id": TENANT_C, "label": "admin-provisioned-token"}))
+            admin_issued_payload = json.loads(admin_issued.content[0].text)
+            new_c_token = admin_issued_payload.get("token")
+            record("opsgate_admin_issue_token mints a token for a different tenant than the caller's own", bool(new_c_token))
+
+            profile_c = await show_profile(new_c_token)
+            record("the admin-issued token actually resolves to the target tenant", profile_c.get("resolved_profile") == TENANT_C)
+
+            non_admin_revoke = await call_with_token(claude_url, token_b, lambda s: s.call_tool("opsgate_admin_revoke_token", {"token": new_c_token}))
+            record("opsgate_admin_revoke_token rejects a non-admin token", bool(non_admin_revoke.isError))
+
+            admin_revoked = await call_with_token(claude_url, admin_token_a, lambda s: s.call_tool("opsgate_admin_revoke_token", {"token": new_c_token}))
+            record("opsgate_admin_revoke_token succeeds for an admin token, on a token belonging to a different tenant", not bool(admin_revoked.isError))
+            revoked_c_status = await raw_post_status(replit_url, {"X-Opsgate-Token": new_c_token})
+            record("the admin-revoked token is actually rejected afterward", revoked_c_status == 401)
+        finally:
+            try:
+                tenants.delete_profile(TENANT_C)
+            except tenants.TenantError:
+                pass
+            shutil.rmtree(ROOT_DIR / "runs" / TENANT_C, ignore_errors=True)
 
         # --- Knowledge resources, shared across both mounts - checked via /mcp/replit ---
         hitl_resource = await call_with_token(replit_url, SHARED_TOKEN, lambda s: s.read_resource("opsgate://knowledge/hitl-protocol"))

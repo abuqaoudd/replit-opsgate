@@ -6,6 +6,8 @@ Per-Action Gate line, discovery steps, and the per-deliverable artifact prompt b
 """
 import re
 
+import opsgate_lexer
+
 
 def as_list(items, fallback="None specified"):
     if not items:
@@ -208,7 +210,7 @@ Automatically route this task through the installed instructions. Selected routi
 | Execution shape | {route.get("execution_shape")} |
 | Internal mode | {route.get("replit_mode")} |
 | Skill | {route.get("skill")} |
-| Capability gate | {route.get("capability")} |
+| Capability gate | {sanitize_inline_text(route.get("capability"))} |
 
 ## Load First
 
@@ -282,6 +284,23 @@ def compile_artifact_prompt(request, route):
 | Template | {route.get("template")} |"""
     common_close = "Keep facts, assumptions, decisions, recommendations, and open questions separate. Use stable IDs where the template requires them. Return only the polished artifact unless commentary is explicitly requested."
     deliverable = route.get("deliverable")
+    # A delta spec gets its own compiled body (see below) rather than the full-spec one - real
+    # delta specs in production (Summary of Changes table, D-* items, Acceptance Criteria
+    # Addendum) are structurally distinct from a fresh specification, not a shorter version of
+    # the same 14-item list. Detected the same word-aware way intake_request_result scores
+    # deliverable signals, rather than requiring a caller to set a separate request field.
+    # Matched as the two-word phrase "delta spec"/"delta specification" - the same phrase
+    # ROUTING_MANIFEST's own "delta spec" signal already uses to route here in the first place -
+    # rather than the bare word "delta" alone, which would also match an unrelated request
+    # whose text happens to contain "delta" (a module literally named Delta, "delta-neutral
+    # hedge calculation", etc.). This does not catch a genuine delta-spec request that never
+    # uses either phrase - there is no better signal available in the request schema for that
+    # case today.
+    delta_spec_text = f"{request.get('module') or ''} {request.get('outcome') or ''}"
+    is_delta_spec = deliverable == "specification" and (
+        opsgate_lexer.lexical_contains(delta_spec_text, "delta spec")
+        or opsgate_lexer.lexical_contains(delta_spec_text, "delta specification")
+    )
     if deliverable == "audit":
         body = f"""Perform a read-only audit for the outcome described below.
 
@@ -340,6 +359,24 @@ Do not hide missing decisions inside implementation tasks. {common_close}"""
 10. Recommended bounded or phased delivery shape.
 
 Do not silently rewrite the original baseline. {common_close}"""
+    elif deliverable == "specification" and is_delta_spec:
+        body = f"""Create a delta specification for the outcome described below: only what is new, changed, removed, or newly clarified relative to the existing specification. Do not restate unchanged behavior at length - cite the base spec's own section or requirement ID instead, and preserve it as still in force.
+
+{routing}
+
+{context_block(request)}
+
+## Required Output
+
+1. Frontmatter and title identifying the base specification this delta is against (`delta_for`), the new governing business/change revision it is derived from (`source_doc`), and this delta's own date.
+2. Summary of Changes table: a stable `D-*` ID, affected area, type (`NEW` / `CORRECTED` / `SUPERSEDED`), and a one-line detail, for every change.
+3. One section per `D-*` change, each naming exactly which base-spec section, `REQ-*`/`NFR-*`/`BR-*` ID, or table it corrects or supersedes, and stating the new behavior in full - including whether the change is UI-only, API-only, schema-level, or a documented regression/known limitation rather than a deliberate improvement.
+4. Data changes scoped to only what changed - added, changed, or removed columns/tables relative to the base spec - or an explicit "no schema changes" statement.
+5. An Acceptance Criteria Addendum containing only new or updated criteria; any criterion that supersedes a base-spec criterion must say so by name rather than leaving both in force as contradictory requirements.
+6. Newly resolved or newly raised decisions (`DEC-*`) and open questions (`OQ-*`) only - do not restate ones the base spec already closed.
+7. Unresolved decisions eligible for HITL.
+
+The base specification's existing approved behavior remains in force wherever this delta is silent. {common_close}"""
     elif deliverable == "specification":
         body = f"""Create or update an implementation-ready specification for the outcome described below.
 
@@ -349,18 +386,20 @@ Do not silently rewrite the original baseline. {common_close}"""
 
 ## Required Output
 
-1. Document control and governing business/change IDs.
-2. System context, scope, exclusions, glossary, assumptions, and explicit decisions.
+1. Frontmatter (module/feature name and involvement flags) plus document control and governing business/change IDs.
+2. System context, scope, exclusions, glossary, assumptions, and explicit decisions (`DEC-*`).
 3. Actors, permissions, tenant/object scope, and authorization matrix.
-4. Functional requirements as `REQ-*`, covering user journeys, state transitions, edge cases, and failure behavior.
-5. Non-functional requirements as `NFR-*`, covering performance, reliability, and other quality attributes.
-6. UI states and accessibility expectations when applicable.
-7. API operations and request/response/error contracts when applicable, including idempotency, compatibility, and versioning.
-8. Data entities, validation, ownership, lifecycle, and migration/backfill implications.
-9. Security, privacy, logging, and auditability.
-10. Compatibility, rollout, rollback, and observability.
-11. Test matrix and acceptance criteria, with requirement-to-source and requirement-to-test traceability.
-12. Unresolved decisions eligible for HITL.
+4. Functional requirements as `REQ-*`, covering user journeys, edge cases, and failure behavior.
+5. State transitions: allowed transitions, guards, side effects, audit events, and invalid-transition behavior.
+6. Non-functional requirements as `NFR-*`, covering performance, reliability, and other quality attributes.
+7. UI states and accessibility expectations when applicable.
+8. API operations and request/response/error contracts when applicable, including idempotency, compatibility, and versioning.
+9. Data entities, validation, ownership, lifecycle, and migration/backfill implications.
+10. Security, privacy, logging, and auditability.
+11. Architecture boundaries, ownership, reuse candidates, and prohibited changes without explicit authorization.
+12. Compatibility, rollout, rollback, and observability.
+13. Test matrix and acceptance criteria, with requirement-to-source and requirement-to-test traceability.
+14. Risks and open questions (`OQ-*`) eligible for HITL.
 
 {common_close}"""
     else:
@@ -378,10 +417,11 @@ Do not silently rewrite the original baseline. {common_close}"""
 4. Desired business outcomes and measurable success criteria.
 5. In-scope capabilities, out-of-scope boundaries, dependencies, constraints, and unchanged behavior.
 6. Actors, stakeholders, responsibilities, decision owners, and approval owners.
-7. Business rules as `BUS-RULE-*` and capabilities as `BUS-CAP-*` with stable IDs.
-8. Current-state and target-state journeys, including exceptions and recovery.
-9. Success measures and acceptance outcomes.
-10. Decisions, assumptions, risks, open questions, and a traceability table.
+7. Business capabilities as `BUS-CAP-*`, atomic business requirements as `BUS-REQ-*`, and business rules as `BUS-RULE-*`, with stable IDs.
+8. Business data concepts, ownership, sensitivity, and retention expectations - not schema design.
+9. Current-state and target-state journeys, including exceptions and recovery.
+10. Success measures and acceptance outcomes.
+11. Decisions (`DEC-*`), recommendations (`REC-*`), open questions (`OQ-*`), assumptions, risks, and a traceability table.
 
 {common_close}"""
     return f"{title}\n\n{CALLER_DATA_NOTICE}\n\n{body}"

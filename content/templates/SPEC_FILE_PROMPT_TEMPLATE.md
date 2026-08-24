@@ -15,13 +15,21 @@ Do not convert assumptions into requirements. Use `OPEN QUESTION` when a missing
 
 ## Delta spec generation
 
-When the request is to generate a delta specification for a module:
+A delta spec is a distinct document shape, not a shorter full spec. When the request is to generate a delta specification for a module:
 
 1. Check the business documentation file for **[module name] module** at **[business documentation link/path]**.
-2. Check the existing spec file for the **[module name] module** at **[existing spec link/path]**.
-3. Compare the new business MD against the existing spec and generate a delta spec file documenting only the new, changed, removed, or newly clarified requirements.
-4. Follow the same spec template, metadata format, structure, terminology, and writing style as the existing spec files.
-5. Name the file using the same spec filename template: `spec-[module-name]-YYYY-MM-DD.md`. For example, for the roles module on 2026-07-26, use `spec-roles-2026-07-26.md`.
+2. Check the existing spec file for the **[module name] module** at **[existing spec link/path]** — and any prior delta already layered on top of it; a delta can be `delta_for` more than one prior document (a base spec plus an earlier delta), and must say so explicitly rather than picking just one.
+3. Compare the new business MD against the existing spec (and any prior delta) and generate a delta spec file documenting only the new, changed, removed, or newly clarified requirements. Do not restate unchanged behavior at length — cite the base document's own section or requirement ID instead, and state that it remains in force.
+4. Structure the delta as its own document, not the full 16-item Deliverable list below:
+   - Frontmatter/header identifying `delta_for` (the base spec, and its own revision/date), `source_doc` (the new business documentation revision this delta is derived from), and this delta's own date.
+   - A **Summary of Changes** table: a stable `D-*` ID, affected area, type (`NEW` / `CORRECTED` / `SUPERSEDED`), and a one-line detail, for every change.
+   - One section per `D-*` change, each naming exactly which base-document section, `REQ-*`/`NFR-*`/`BR-*`/`BUS-RULE-*` ID, or table it corrects or supersedes, and stating the new behavior in full — including whether it is UI-only, API-only, schema-level, or a documented regression/known limitation rather than a deliberate improvement.
+   - Data changes scoped to only what changed (added/changed/removed columns or tables), or an explicit "no schema changes" statement.
+   - An **Acceptance Criteria Addendum** with only new or updated criteria; any criterion that supersedes a base-document criterion must say so by name, not leave both in force as contradictory requirements.
+   - Newly resolved or newly raised `DEC-*`/`OQ-*` entries only.
+   - A Final Check section, same as a full spec.
+5. Follow the same metadata format, terminology, and writing style as the existing spec files — but not their full section list.
+6. Filename: two conventions are both in real use — `spec-[module-name]-delta-YYYYMMDD.md` (self-describing; prefer this for new deltas) and `spec-[module-name]-YYYY-MM-DD.md` (also used for full, non-delta specs dated directly — do not assume a dated filename with no "delta" in it is automatically a fresh spec). Whichever is used, the document's own frontmatter/title must make its delta-or-full status unambiguous without relying on the filename.
 
 The delta spec must preserve existing approved behavior unless the business documentation explicitly changes it. It must distinguish confirmed deltas from inferred gaps, mark missing decisions as `OPEN QUESTION`, and keep all requirement IDs traceable to the governing business documentation and prior spec sections.
 
@@ -29,9 +37,9 @@ The delta spec must preserve existing approved behavior unless the business docu
 
 Write an implementation-ready specification containing:
 
-1. Document control: ID, version, status, owner, reviewers, date, revision history, and governing sources.
-2. Objective, system context, scope, exclusions, glossary, assumptions, and explicit decisions.
-3. Requirement traceability from business/change IDs to `REQ-*`, `NFR-*`, `SEC-*`, `DATA-*`, and `UX-*`.
+1. A frontmatter block (feature/module name and involvement flags such as backend/frontend/database/OpenAPI changes) plus document control: ID, version, status, owner, reviewers, date, revision history, and governing sources.
+2. Objective, system context, scope, exclusions, glossary, assumptions, and explicit decisions (`DEC-*`).
+3. Requirement traceability from business/change IDs to `REQ-*`, `NFR-*`, `SEC-*`, `DATA-*`, `UX-*`, and open questions (`OQ-*`).
 4. Actors, authentication context, permissions, tenant/object scope, field-level access, and authorization matrix.
 5. Functional flows with triggers, preconditions, success, alternate, validation, empty, loading, conflict, error, retry, cancellation, and recovery states.
 6. State transitions with allowed transitions, guards, side effects, audit events, and invalid-transition behavior.
@@ -44,7 +52,7 @@ Write an implementation-ready specification containing:
 13. Compatibility, rollout, feature control, rollback/recovery, monitoring, and support expectations.
 14. Acceptance criteria in observable Given/When/Then or equivalent form.
 15. Verification matrix, safe test data, environments, failure injection, and evidence requirements.
-16. Risks, decisions, and open questions, including only questions eligible for the three-case HITL protocol.
+16. Risks, decisions (`DEC-*`), and open questions (`OQ-*`), including only questions eligible for the three-case HITL protocol.
 
 ## Functional requirement record
 

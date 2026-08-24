@@ -18,10 +18,13 @@ registered - the tool names it was told to expect are the tool names here.
 
 Two mount paths, not one: `/mcp/replit` (gate/profile/decision tools plus the
 instruction-sync tools) and `/mcp/claude` (the prompt-compiler chain -
-intake/route/compile/next-phase/parse/lint/init/export), sharing five gate
-tools both roles need. See the "Two separate tool surfaces" comment below for
-why - in short, each caller gets only the tools its own role actually needs,
-not a security boundary (both mounts share the same auth/tenant resolution).
+intake/route/compile/next-phase/parse/lint/init/export/list-runs/get-run),
+sharing fourteen tools both roles need (the five gate/profile/decision
+tools, self-service token rotation, audit-log reading, quota visibility, and
+the four admin-gated tenant-provisioning tools). See the "Two separate tool
+surfaces" comment below for why - in short, each caller gets only the tools
+its own role actually needs, not a security boundary (both mounts share the
+same auth/tenant resolution).
 
 Where this lives: `<engine-dir>/mcp-server/opsgate_mcp_server.py`, a sibling
 of `tools/`. It imports `opsgate.py` directly from the real `tools/`
@@ -117,10 +120,28 @@ except ImportError:
 # authenticates identically against either path - the gates inside each tool
 # call are what actually enforce authorization, unchanged by which mount was
 # used to reach them.
+#
+# stateless_http=True (both instances) is a security-critical setting, not a performance
+# knob. In stateful mode the SDK spawns one long-lived task per session at creation time,
+# and every later request to that Mcp-Session-Id is serviced by that same task regardless
+# of which token authenticates the later request - Python's contextvars don't propagate
+# across tasks, so TokenAuthMiddleware setting _current_tenant_id/_current_is_admin fresh
+# on each incoming request has no effect on a session's own task, which keeps running
+# with whatever identity was current when the session was first created. The SDK has a
+# built-in guard against exactly this (a session may only be reused by the credential
+# that created it), but it only activates when the app is constructed with a real auth
+# provider populating scope["user"] - this server authenticates via TokenAuthMiddleware
+# instead, so that guard never activates, and without stateless_http any valid token
+# could resume any other tenant's (or an admin's) existing session by presenting its
+# Mcp-Session-Id. Stateless mode removes the vulnerable mechanism entirely - every
+# request gets its own fresh transport and task, spawned from (and inheriting the
+# contextvars of) the very request handling it, so there is no session identity to
+# hijack in the first place.
 # ---------------------------------------------------------------------------
 
 mcp_replit = FastMCP(
     name="opsgate-replit",
+    stateless_http=True,
     instructions=(
         "Gate, profile, and decision tools for a Replit Agent's own implementation work. "
         "See this project's replit.md (Section 9, 'MCP tool availability') for when and how "
@@ -129,6 +150,7 @@ mcp_replit = FastMCP(
 )
 mcp_claude = FastMCP(
     name="opsgate-claude",
+    stateless_http=True,
     instructions=(
         "Tools for Claude acting as the prompt compiler for a Replit-hosted project. Only use "
         "this tool chain when the user is actually describing or requesting implementation work "
@@ -191,10 +213,25 @@ def shared_resource(uri, **kwargs):
 # ---------------------------------------------------------------------------
 
 _current_tenant_id = contextvars.ContextVar("_current_tenant_id", default=None)
+# Set alongside _current_tenant_id by the same TokenAuthMiddleware call - always False for the
+# shared-secret path (that path resolves no specific tenant at all, admin or otherwise) and for
+# any tenant token not explicitly issued with admin=True via opsgate_tenants.issue_token().
+_current_is_admin = contextvars.ContextVar("_current_is_admin", default=False)
 
 
 def _active_tenant_id():
     return _current_tenant_id.get() or opsgate_tenants.LOCAL_DEV_TENANT_ID
+
+
+def _require_admin():
+    """Raises PermissionError - surfaced to the caller as a normal tool-call error, exactly like
+    any other rejected precondition in this server - unless the token that authenticated this
+    call was issued with admin=True. Every opsgate_admin_* tool below calls this first, before
+    touching the tenant registry, so a non-admin token can never reach the registry-wide
+    operations (creating a tenant, issuing/revoking another tenant's token, listing every
+    tenant) that opsgate_tenants.py itself has no scoping for on its own."""
+    if not _current_is_admin.get():
+        raise PermissionError("this tool requires an admin-flagged token")
 
 
 # ---------------------------------------------------------------------------
@@ -318,16 +355,169 @@ def opsgate_show_profile(request: dict | None = None) -> dict:
     return opsgate.show_profile_result(request or {}, tenant_id=_active_tenant_id())
 
 
-@claude_tool(
-    name="opsgate_init_state",
+@shared_tool(
+    name="opsgate_list_own_tokens",
     description=(
-        "Build the initial run-state object (status, phases if execution is phased, empty "
-        "decisions/checks lists) for a request, based on its resolved route. Read-only - does "
-        "not write anything to disk (use opsgate_init_run for that)."
+        "List non-secret metadata (label, admin flag) for every token currently issued to the "
+        "caller's own tenant - never the token values themselves, which are never recoverable "
+        "once issued. Use this to audit what tokens exist and what each one is actually for, "
+        "e.g. before deciding whether to issue a new one or revoke an old one."
     ),
 )
-def opsgate_init_state(request: dict) -> dict:
-    return opsgate.init_state_result(request or {}, tenant_id=_active_tenant_id())
+def opsgate_list_own_tokens() -> dict:
+    return opsgate.list_own_tokens_result(tenant_id=_active_tenant_id())
+
+
+@shared_tool(
+    name="opsgate_issue_own_token",
+    description=(
+        "Mint a new, non-admin authentication token for the caller's own tenant and return it "
+        "in plaintext - shown exactly once, never recoverable afterward. Optionally pass a "
+        "`label` (e.g. \"claude-code-direct\", \"replit-connector\") to record what this "
+        "specific token is for, visible later via opsgate_list_own_tokens. Use this to rotate a "
+        "credential or provision a second, separately-attributable token for the same tenant - "
+        "never mints an admin token, regardless of any label supplied."
+    ),
+)
+def opsgate_issue_own_token(label: str | None = None) -> dict:
+    return opsgate.issue_own_token_result(tenant_id=_active_tenant_id(), label=label)
+
+
+@shared_tool(
+    name="opsgate_revoke_own_token",
+    description=(
+        "Revoke one of the caller's own tenant's tokens by its exact plaintext value - only "
+        "succeeds if that token actually belongs to the caller's own tenant; a token belonging "
+        "to a different tenant is rejected, never revoked. Idempotent - revoking an "
+        "already-revoked token is a no-op. Use this after opsgate_issue_own_token to complete a "
+        "rotation, passing the old token value here."
+    ),
+)
+def opsgate_revoke_own_token(token: str) -> dict:
+    return opsgate.revoke_own_token_result(token, tenant_id=_active_tenant_id())
+
+
+@shared_tool(
+    name="opsgate_admin_create_tenant",
+    description=(
+        "ADMIN ONLY (requires a token issued with admin=True) - register a brand-new tenant by "
+        "ID with its frontend/backend roots and other profile fields. Fails if the tenant_id "
+        "already exists - use is a one-time provisioning step per tenant, not an update path."
+    ),
+)
+def opsgate_admin_create_tenant(
+    tenant_id: str,
+    frontend_root: str | None = None,
+    backend_root: str | None = None,
+    description: str | None = None,
+    extra_never_access: list | None = None,
+    business_file: str | None = None,
+) -> dict:
+    _require_admin()
+    return opsgate.admin_create_tenant_result(
+        tenant_id,
+        frontend_root=frontend_root,
+        backend_root=backend_root,
+        description=description,
+        extra_never_access=extra_never_access,
+        business_file=business_file,
+    )
+
+
+@shared_tool(
+    name="opsgate_admin_list_tenants",
+    description=(
+        "ADMIN ONLY (requires a token issued with admin=True) - list every tenant's own public "
+        "profile (never token values or hashes) across the whole registry, not just the "
+        "caller's own tenant."
+    ),
+)
+def opsgate_admin_list_tenants() -> dict:
+    _require_admin()
+    return opsgate.admin_list_tenants_result()
+
+
+@shared_tool(
+    name="opsgate_admin_issue_token",
+    description=(
+        "ADMIN ONLY (requires a token issued with admin=True) - mint a new token for ANY "
+        "tenant by ID, optionally admin-flagged itself, and return it in plaintext - shown "
+        "exactly once, never recoverable afterward. Unlike opsgate_issue_own_token, this can "
+        "target a different tenant than the caller's own and can mint further admin tokens."
+    ),
+)
+def opsgate_admin_issue_token(tenant_id: str, admin: bool = False, label: str | None = None) -> dict:
+    _require_admin()
+    return opsgate.admin_issue_token_result(tenant_id, admin=admin, label=label)
+
+
+@shared_tool(
+    name="opsgate_admin_revoke_token",
+    description=(
+        "ADMIN ONLY (requires a token issued with admin=True) - revoke any token by its exact "
+        "plaintext value, regardless of which tenant it belongs to. Unlike "
+        "opsgate_revoke_own_token, this has no ownership check - an admin is trusted with any "
+        "tenant's tokens by design. Idempotent - revoking an already-revoked token is a no-op."
+    ),
+)
+def opsgate_admin_revoke_token(token: str) -> dict:
+    _require_admin()
+    return opsgate.admin_revoke_token_result(token)
+
+
+@shared_tool(
+    name="opsgate_list_audit_log",
+    description=(
+        "List the caller's own tenant's most recent tool-call audit entries (tool name, "
+        "success, duration, timestamp, error if any) - never another tenant's, even though the "
+        "underlying log file is shared. Use this to check whether recent calls through this "
+        "connection actually reached the server and succeeded, e.g. while diagnosing a "
+        "connection issue."
+    ),
+)
+def opsgate_list_audit_log(limit: int | None = None) -> dict:
+    return opsgate.list_audit_log_result(tenant_id=_active_tenant_id(), limit=limit)
+
+
+@shared_tool(
+    name="opsgate_quota_usage",
+    description=(
+        "Report the caller's own tenant's call volume over the last hour/24h/7d, plus a "
+        "per-tool breakdown, computed from the audit log - visibility only, there is no rate "
+        "limit enforced anywhere in this server. Use this to understand real usage before any "
+        "limit is set, not to check against one that exists."
+    ),
+)
+def opsgate_quota_usage() -> dict:
+    return opsgate.quota_usage_result(tenant_id=_active_tenant_id())
+
+
+@claude_tool(
+    name="opsgate_list_runs",
+    description=(
+        "List the caller's own tenant's tracked runs (from opsgate_init_run), most recently "
+        "updated first, with each run's current gate status and handoff completion/"
+        "next-phase-ready flags - never another tenant's runs. Use this to recover a run's "
+        "identity if the run_id was lost from this conversation, or to see what runs are still "
+        "in flight."
+    ),
+)
+def opsgate_list_runs(limit: int | None = None) -> dict:
+    return opsgate.list_runs_result(tenant_id=_active_tenant_id(), limit=limit)
+
+
+@claude_tool(
+    name="opsgate_get_run",
+    description=(
+        "Read back everything opsgate_init_run persisted for one of the caller's own tenant's "
+        "runs - the original request, resolved route, gate result, and handoff state - never "
+        "another tenant's run, and never a run that doesn't exist under this tenant. Use this to "
+        "reconstruct run state if it was lost from this conversation, rather than re-deriving it "
+        "from scratch."
+    ),
+)
+def opsgate_get_run(run_id: str) -> dict:
+    return opsgate.get_run_result(run_id, tenant_id=_active_tenant_id())
 
 
 @claude_tool(
@@ -653,7 +843,7 @@ class TokenAuthMiddleware:
             bearer = headers.get(BEARER_HEADER_NAME, b"").decode("latin-1")
             if bearer.lower().startswith("bearer "):
                 supplied = bearer[len("bearer "):].strip()
-        tenant_id, _is_admin = opsgate_tenants.resolve_tenant_from_token(supplied)
+        tenant_id, is_admin = opsgate_tenants.resolve_tenant_from_token(supplied)
         if tenant_id is None and not hmac.compare_digest(supplied, self.token):
             response = JSONResponse(
                 {"error": f"unauthorized - missing or invalid {AUTH_HEADER_NAME.decode()} header"},
@@ -662,11 +852,17 @@ class TokenAuthMiddleware:
             )
             await response(scope, receive, send)
             return
-        reset_token = _current_tenant_id.set(tenant_id)
+        # The shared-secret path (tenant_id is None here) is never admin, regardless of `is_admin`
+        # above - resolve_tenant_from_token() only returns True for a real tenant token explicitly
+        # issued with admin=True; a shared-secret match leaves is_admin at its unresolved default,
+        # which is already False, but this is stated explicitly rather than relied upon.
+        reset_tenant = _current_tenant_id.set(tenant_id)
+        reset_admin = _current_is_admin.set(bool(is_admin) if tenant_id is not None else False)
         try:
             await self.app(scope, receive, send)
         finally:
-            _current_tenant_id.reset(reset_token)
+            _current_tenant_id.reset(reset_tenant)
+            _current_is_admin.reset(reset_admin)
 
 
 def _load_dotenv_if_present():

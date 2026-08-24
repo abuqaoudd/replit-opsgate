@@ -33,7 +33,6 @@ The engine foundation makes this engine programmable without replacing the agent
 - `validate-engine` checks Python contracts, skill metadata, protected rules, fixtures, compiler output, run state, and report parsing.
 - `route-request` returns the selected artifact, mode, skill, references, execution shape, and missing authority.
 - `compile-prompt` creates a first operational prompt from request data and routing output.
-- `init-state` creates structured run state.
 - `parse-report` extracts structured evidence from a final report.
 
 ## 5. Markdown cleanup rule

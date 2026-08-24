@@ -23,6 +23,7 @@ Capture:
 - Existing business file: path or link to preserve, revise, or replace.
 - Evidence inspected: files, screenshots, policies, current app behavior, logs, user notes, and related documentation.
 - Audit result: confirmed behavior, missing requirements, outdated requirements, conflicting evidence, unsupported claims, and open questions.
+- Confirmed discrepancies against the existing business file, each recorded with a stable `DRIFT-*` ID naming exactly what changed and which requirement/rule it affects — not folded silently into the updated prose.
 - Update goal: new module business file, revised existing file, gap correction, or full audit refresh.
 
 Preserve still-valid business requirements, change or retire outdated requirements, add missing requirements, mark unsupported claims as `OPEN QUESTION`, and keep the file implementation-neutral.
@@ -44,7 +45,7 @@ Write a decision-ready business file containing:
 11. Assumptions, constraints, dependencies, risks, mitigations, and operational readiness.
 12. Success measures with baseline, target, measurement method, owner, and observation window.
 13. Business acceptance outcomes and evidence required for approval.
-14. Decisions, recommendations, open questions, and traceability linking evidence to requirements.
+14. Decisions (`DEC-*`), recommendations (`REC-*`), open questions (`OQ-*`), and traceability linking evidence to requirements.
 
 ## Requirement record
 

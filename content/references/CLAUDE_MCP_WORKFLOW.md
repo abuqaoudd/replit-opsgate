@@ -52,6 +52,22 @@ and respond normally.
   the full gate.
 - `opsgate_export_ruleset` - a snapshot of the durable governance rules (HITL protocol, security
   rules, skill workflows, instruction objects) for offline or CI use.
+- `opsgate_list_runs` / `opsgate_get_run` - recover a phased run's tracked state (request, route,
+  gate result, handoff) if it was lost from this conversation, rather than re-deriving it from
+  scratch. Always scoped to the caller's own tenant.
+- `opsgate_list_audit_log` - the caller's own tenant's recent tool-call history (tool, success,
+  duration, error), useful when diagnosing whether calls through this connection are actually
+  reaching the server.
+- `opsgate_list_own_tokens` / `opsgate_issue_own_token` / `opsgate_revoke_own_token` - self-service
+  credential rotation for the caller's own tenant. `opsgate_issue_own_token` never mints an admin
+  token; `opsgate_revoke_own_token` only succeeds on a token that belongs to the caller's own
+  tenant.
+- `opsgate_quota_usage` - the caller's own tenant's call volume over the last hour/24h/7d, plus a
+  per-tool breakdown. Visibility only - no rate limit is enforced anywhere in this server.
+- `opsgate_admin_create_tenant` / `opsgate_admin_list_tenants` / `opsgate_admin_issue_token` /
+  `opsgate_admin_revoke_token` - ADMIN ONLY (require a token issued with `admin=True`); registry-wide
+  operations across every tenant, not just the caller's own. A non-admin token calling one of
+  these gets a normal tool-call error, never a silent no-op.
 
 ## Rules
 

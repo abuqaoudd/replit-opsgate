@@ -8,6 +8,7 @@ orchestrating calls into the modules above) plus the COMMANDS dispatch table thi
 CLI entrypoint (`python3 tools/opsgate.py <command> [args...]`) and
 mcp-server/opsgate_mcp_server.py both rely on.
 """
+import ast
 import datetime as _dt
 import json
 import re
@@ -20,7 +21,7 @@ import opsgate_tenants
 from opsgate_io import ROOT_DIR, load_data, load_request, print_json, usage, write_python_data
 from opsgate_prompts import compile_artifact_prompt, compile_replit_prompt
 from opsgate_profiles import matches_protected, read_json
-from opsgate_routing import route_request, unique
+from opsgate_routing import capability_authorized, route_request, unique
 from opsgate_validation import REQUIRED_GATE_ROWS, extract_section, is_placeholder, parse_markdown_table, validate_value
 from opsgate_selftest import cmd_test_all, cmd_validate_engine
 
@@ -40,6 +41,25 @@ def _extract_tenant_flag(argv):
     return tenant_id, remaining
 
 
+def _extract_limit_flag(argv):
+    """Pulls a leading/trailing `--limit <n>` flag out of argv, same convention as
+    _extract_tenant_flag(). Returns (limit_or_None, remaining_positional_argv) - None (not a
+    default number) when the flag is absent, so callers can tell "not specified" apart from
+    "specified as 0" and pass that distinction through to the underlying *_result function's
+    own default handling."""
+    if "--limit" not in argv:
+        return None, argv
+    index = argv.index("--limit")
+    if index + 1 >= len(argv):
+        usage("--limit requires a value, e.g. --limit 10")
+    limit_value = argv[index + 1]
+    remaining = argv[:index] + argv[index + 2:]
+    try:
+        return int(limit_value), remaining
+    except ValueError:
+        usage(f"--limit must be an integer, got {limit_value!r}")
+
+
 def cmd_route_request(argv):
     tenant_id, argv = _extract_tenant_flag(argv)
     if not argv:
@@ -50,15 +70,15 @@ def cmd_route_request(argv):
 def check_capabilities_result(request, tenant_id=None):
     route = route_request(request, tenant_id=tenant_id)
     gates = read_json("manifests/capability-gates.json")
-    missing = []
-    capabilities = set((request.get("authorizations") or {}).keys())
+    authorizations = request.get("authorizations") or {}
+    capabilities = set(authorizations.keys())
     if route.get("capability"):
         capabilities.add(route["capability"])
+    missing = []
     for capability in capabilities:
         if capability not in gates:
             continue
-        auth = (request.get("authorizations") or {}).get(capability) or {}
-        if auth.get("authorized") is not True and gates[capability].get("default") == "blocked":
+        if not capability_authorized(capability, authorizations, gates):
             missing.append({"capability": capability, "required": gates[capability].get("requires", [])})
     return {"can_proceed": len(missing) == 0, "route_capability": route.get("capability"), "missing": missing}
 
@@ -195,52 +215,6 @@ def cmd_compile_prompt(argv):
     if not argv:
         usage("Usage: python3 tools/opsgate.py compile-prompt <request.json> [--tenant <id>]")
     print(compile_prompt_text(load_request(argv[0]), tenant_id=tenant_id))
-
-
-def init_state_result(request, tenant_id=None):
-    route = route_request(request, tenant_id=tenant_id)
-    state = {
-        "request_id": request.get("id"),
-        "status": "blocked" if route.get("blocked") else "ready",
-        "deliverable": route.get("deliverable"),
-        "artifact_mode": route.get("artifact_mode"),
-        "replit_mode": route.get("replit_mode"),
-        "skill": route.get("skill"),
-        "execution_shape": route.get("execution_shape"),
-        "capability": route.get("capability"),
-        "missing_authority": route.get("missing_authority") or [],
-        "scope": request.get("scope") or {},
-        "decisions": [],
-        "checks": [],
-        "phases": [],
-    }
-    if route.get("execution_shape") == "phased":
-        state["phases"] = [
-            {
-                "id": "PHASE-0",
-                "status": "blocked" if route.get("blocked") else "planned",
-                "outcome": "Discovery, prerequisite proof, and phase authorization check",
-                "write_paths": [],
-                "verification_gate": ["Prerequisites and capability gates are evidenced"],
-                "rollback_boundary": "No write operations",
-            },
-            {
-                "id": "PHASE-1",
-                "status": "blocked" if route.get("blocked") else "planned",
-                "outcome": request.get("outcome"),
-                "write_paths": (request.get("scope") or {}).get("write_paths") or [],
-                "verification_gate": request.get("acceptance") or [],
-                "rollback_boundary": "Current phase changed files only",
-            },
-        ]
-    return state
-
-
-def cmd_init_state(argv):
-    tenant_id, argv = _extract_tenant_flag(argv)
-    if not argv:
-        usage("Usage: python3 tools/opsgate.py init-state <request.json> [--tenant <id>]")
-    print_json(init_state_result(load_request(argv[0]), tenant_id=tenant_id))
 
 
 def parse_report_result(text):
@@ -561,6 +535,348 @@ def cmd_init_run(argv):
     print_json(init_run_result(load_request(argv[0]), tenant_id=tenant_id))
 
 
+def _read_run_file(path, variable_name):
+    """Reads one of init_run_result()'s written files (request.py/route.py/gate_result.py/
+    handoff.py - each a `VARNAME = {pprint.pformat(...) literal}` module written by
+    write_python_data()) back into a Python value. Uses ast.literal_eval rather than exec()/
+    import - these files have never needed to be more than a data literal, and a reader exposed
+    to an MCP caller should not execute file content as code even though today's writer only
+    ever produces safe literals."""
+    text = path.read_text(encoding="utf-8")
+    match = re.search(rf"(?m)^{re.escape(variable_name)} = ", text)
+    if not match:
+        raise ValueError(f"{path.name} does not define {variable_name}")
+    return ast.literal_eval(text[match.end():])
+
+
+MAX_LIST_LIMIT = 200
+DEFAULT_LIST_LIMIT = 50
+
+
+def _normalize_limit(limit, default, maximum):
+    """`None` means "use the default"; any explicit integer - including 0 - is honored as a
+    real request rather than silently falling back to the default (`limit or default` would be
+    wrong here, since 0 is falsy in Python but "return zero results" is a legitimate ask, not
+    "unspecified"). A negative limit is rejected outright rather than silently mis-slicing -
+    Python's negative-index slice semantics (`items[:-1]`, `items[-1:]`) would otherwise drop
+    items from the wrong end instead of raising a clear error."""
+    if limit is None:
+        return default
+    limit = int(limit)
+    if limit < 0:
+        raise ValueError(f"limit must be a non-negative integer, got {limit}")
+    return min(limit, maximum)
+
+
+def list_runs_result(tenant_id=None, limit=None):
+    """Lists the calling tenant's own runs/<tenant_id>/*/ directories - never another tenant's,
+    since the directory scanned is always this tenant's own, the same scoping every other
+    tenant-aware function in this file uses. Most-recently-modified first, capped at
+    MAX_LIST_LIMIT regardless of what the caller asks for, so a tenant with a very long run
+    history can't force one call to read and return an unbounded number of run directories."""
+    tenant_id = tenant_id or opsgate_tenants.LOCAL_DEV_TENANT_ID
+    limit = _normalize_limit(limit, DEFAULT_LIST_LIMIT, MAX_LIST_LIMIT)
+    safe_tenant_id = _UNSAFE_RUN_ID_CHARS.sub("_", str(tenant_id))
+    tenant_runs_dir = ROOT_DIR / "runs" / safe_tenant_id
+    if not tenant_runs_dir.is_dir():
+        return {"tenant_id": tenant_id, "runs": [], "truncated": False}
+    run_dirs = sorted((path for path in tenant_runs_dir.iterdir() if path.is_dir()), key=lambda path: path.stat().st_mtime, reverse=True)
+    runs = []
+    for run_dir in run_dirs[:limit]:
+        entry = {"run_id": run_dir.name, "status": None, "completed": None, "next_phase_ready": None}
+        try:
+            entry["status"] = _read_run_file(run_dir / "gate_result.py", "GATE_RESULT").get("status")
+        except (OSError, ValueError, SyntaxError):
+            pass
+        try:
+            handoff = _read_run_file(run_dir / "handoff.py", "HANDOFF")
+            entry["completed"] = handoff.get("completed")
+            entry["next_phase_ready"] = handoff.get("next_phase_ready")
+        except (OSError, ValueError, SyntaxError):
+            pass
+        runs.append(entry)
+    return {"tenant_id": tenant_id, "runs": runs, "truncated": len(run_dirs) > limit}
+
+
+def cmd_list_runs(argv):
+    tenant_id, argv = _extract_tenant_flag(argv)
+    limit, argv = _extract_limit_flag(argv)
+    print_json(list_runs_result(tenant_id=tenant_id, limit=limit))
+
+
+def get_run_result(run_id, tenant_id=None):
+    """Reads back everything init_run_result() persisted for one of the calling tenant's own
+    runs. run_id is sanitized the same way init_run_result() sanitizes it before ever using it
+    as a path segment, so a value like "../other-tenant" can't escape this tenant's own runs/
+    directory - it just fails to match an existing (sanitized) directory name instead.
+
+    A file that never got written (e.g. an older run predating a field) is reported as `None`
+    for that key; a file that exists but fails to parse - a real corruption case, e.g. from a
+    process crash mid-write - raises a clear, named error instead of either crashing with a raw
+    traceback or silently returning None indistinguishable from "never written". This function
+    is the authoritative single-run recovery path, unlike list_runs_result()'s best-effort
+    summary across many runs, so surfacing corruption loudly here is the right tradeoff."""
+    tenant_id = tenant_id or opsgate_tenants.LOCAL_DEV_TENANT_ID
+    safe_tenant_id = _UNSAFE_RUN_ID_CHARS.sub("_", str(tenant_id))
+    safe_run_id = _UNSAFE_RUN_ID_CHARS.sub("_", str(run_id))
+    run_dir = ROOT_DIR / "runs" / safe_tenant_id / safe_run_id
+    if not run_dir.is_dir():
+        raise ValueError(f"no run {run_id!r} found for this tenant")
+    result = {"run_id": run_id, "tenant_id": tenant_id}
+    for filename, variable_name, key in [
+        ("request.py", "REQUEST", "request"),
+        ("route.py", "ROUTE", "route"),
+        ("gate_result.py", "GATE_RESULT", "gate_result"),
+        ("handoff.py", "HANDOFF", "handoff"),
+    ]:
+        path = run_dir / filename
+        if not path.exists():
+            result[key] = None
+            continue
+        try:
+            result[key] = _read_run_file(path, variable_name)
+        except (OSError, ValueError, SyntaxError) as exc:
+            raise ValueError(f"run {run_id!r}'s {filename} is corrupted or unreadable: {exc}") from exc
+    return result
+
+
+def cmd_get_run(argv):
+    tenant_id, argv = _extract_tenant_flag(argv)
+    if not argv:
+        usage("Usage: python3 tools/opsgate.py get-run <run-id> [--tenant <id>]")
+    print_json(get_run_result(argv[0], tenant_id=tenant_id))
+
+
+DEFAULT_AUDIT_LOG_LIMIT = 50
+
+
+def list_audit_log_result(tenant_id=None, limit=None):
+    """Reads runs/audit.jsonl - one file shared across every tenant, written by the MCP
+    server's _audit_wrap() for every tool call - and returns only the calling tenant's own
+    entries, most recent first. Filtering happens here rather than trusting the file's own
+    layout to keep tenants apart, since the file itself has no per-tenant separation on disk
+    (unlike runs/<tenant_id>/ or decisions.pylog, which are already tenant-scoped by directory)."""
+    tenant_id = tenant_id or opsgate_tenants.LOCAL_DEV_TENANT_ID
+    limit = _normalize_limit(limit, DEFAULT_AUDIT_LOG_LIMIT, MAX_LIST_LIMIT)
+    audit_log_path = ROOT_DIR / "runs" / "audit.jsonl"
+    if not audit_log_path.exists():
+        return {"tenant_id": tenant_id, "entries": []}
+    entries = []
+    with audit_log_path.open(encoding="utf-8") as handle:
+        for line in handle:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                entry = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if entry.get("tenant_id") == tenant_id:
+                entries.append(entry)
+    # `entries[-limit:]` would be wrong for limit == 0 - Python's `list[-0:]` is `list[0:]`
+    # (all items), not zero, since -0 == 0. Guarded explicitly rather than relying on slice
+    # semantics to do the right thing for every value _normalize_limit can return.
+    entries = entries[-limit:] if limit > 0 else []
+    entries.reverse()
+    return {"tenant_id": tenant_id, "entries": entries}
+
+
+def cmd_list_audit_log(argv):
+    tenant_id, argv = _extract_tenant_flag(argv)
+    limit, argv = _extract_limit_flag(argv)
+    print_json(list_audit_log_result(tenant_id=tenant_id, limit=limit))
+
+
+QUOTA_WINDOWS_HOURS = {"last_hour": 1, "last_24h": 24, "last_7d": 24 * 7}
+
+
+def quota_usage_result(tenant_id=None):
+    """Visibility only - there is no rate limit anywhere in this server to report against, and
+    none is enforced by this function. Computed from the same runs/audit.jsonl
+    list_audit_log_result() reads, scoped to the caller's own tenant the same way. Exists so a
+    tenant or operator can see real call volume before any actual limit is ever set, rather than
+    picking a threshold with no usage data behind it."""
+    tenant_id = tenant_id or opsgate_tenants.LOCAL_DEV_TENANT_ID
+    audit_log_path = ROOT_DIR / "runs" / "audit.jsonl"
+    window_counts = {name: 0 for name in QUOTA_WINDOWS_HOURS}
+    tool_counts = {}
+    total = 0
+    now = _dt.datetime.now(_dt.timezone.utc)
+    if audit_log_path.exists():
+        with audit_log_path.open(encoding="utf-8") as handle:
+            for line in handle:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    entry = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if entry.get("tenant_id") != tenant_id:
+                    continue
+                total += 1
+                tool_name = entry.get("tool")
+                tool_counts[tool_name] = tool_counts.get(tool_name, 0) + 1
+                try:
+                    at = _dt.datetime.fromisoformat(str(entry.get("at")).replace("Z", "+00:00"))
+                except (TypeError, ValueError):
+                    continue
+                age_hours = (now - at).total_seconds() / 3600
+                for window_name, window_hours in QUOTA_WINDOWS_HOURS.items():
+                    if 0 <= age_hours <= window_hours:
+                        window_counts[window_name] += 1
+    return {
+        "tenant_id": tenant_id,
+        "call_counts": window_counts,
+        "total_calls_recorded": total,
+        "calls_by_tool": tool_counts,
+        "note": "Visibility only - no rate limit is currently enforced anywhere in this server.",
+    }
+
+
+def cmd_quota_usage(argv):
+    tenant_id, argv = _extract_tenant_flag(argv)
+    print_json(quota_usage_result(tenant_id=tenant_id))
+
+
+def list_own_tokens_result(tenant_id=None):
+    tenant_id = tenant_id or opsgate_tenants.LOCAL_DEV_TENANT_ID
+    return {"tenant_id": tenant_id, "tokens": opsgate_tenants.list_tokens(tenant_id)}
+
+
+def cmd_list_own_tokens(argv):
+    tenant_id, argv = _extract_tenant_flag(argv)
+    print_json(list_own_tokens_result(tenant_id=tenant_id))
+
+
+def issue_own_token_result(tenant_id=None, label=None):
+    """Always mints a non-admin token for the caller's own resolved tenant. Self-service token
+    rotation must never be able to mint an admin-flagged token (one that can address another
+    tenant's profile via opsgate_tenants.resolve_tenant()'s override path) - forced to admin=False
+    here regardless of anything a caller might pass, rather than trusting an `admin` request
+    field that doesn't even exist on this function's signature."""
+    tenant_id = tenant_id or opsgate_tenants.LOCAL_DEV_TENANT_ID
+    token = opsgate_tenants.issue_token(tenant_id, admin=False, label=label)
+    return {
+        "tenant_id": tenant_id,
+        "token": token,
+        "label": label,
+        "warning": "Shown once - store it now. It cannot be recovered later; issue a new one if this is lost.",
+    }
+
+
+def cmd_issue_own_token(argv):
+    tenant_id, argv = _extract_tenant_flag(argv)
+    label = argv[0] if argv else None
+    print_json(issue_own_token_result(tenant_id=tenant_id, label=label))
+
+
+def revoke_own_token_result(token, tenant_id=None):
+    """Only revokes `token` if it actually belongs to the caller's own resolved tenant.
+    opsgate_tenants.revoke_token() itself has no tenant scoping at all - it searches every
+    tenant for a matching hash and removes whichever one it finds - so calling it directly here
+    with no ownership check would let any authenticated caller revoke a token string they merely
+    obtained or guessed, regardless of which tenant it actually belongs to."""
+    tenant_id = tenant_id or opsgate_tenants.LOCAL_DEV_TENANT_ID
+    owner_tenant_id, _is_admin = opsgate_tenants.resolve_tenant_from_token(token)
+    if owner_tenant_id != tenant_id:
+        raise opsgate_tenants.TenantError("that token does not belong to your own tenant")
+    opsgate_tenants.revoke_token(token)
+    return {"revoked": True}
+
+
+def cmd_revoke_own_token(argv):
+    tenant_id, argv = _extract_tenant_flag(argv)
+    if not argv:
+        usage("Usage: python3 tools/opsgate.py revoke-own-token <token> [--tenant <id>]")
+    print_json(revoke_own_token_result(argv[0], tenant_id=tenant_id))
+
+
+def admin_create_tenant_result(tenant_id, frontend_root=None, backend_root=None, description=None, extra_never_access=None, business_file=None):
+    """Registry-wide operation, unlike every *_own_* function above - creates a brand-new tenant
+    by ID, not scoped to any existing caller identity. The MCP tool wrapping this calls
+    _require_admin() first (see mcp-server/opsgate_mcp_server.py); this function itself performs
+    no admin check, the same as opsgate_tenants.create_profile() it delegates to directly, since
+    the CLI has no caller-identity concept to check in the first place."""
+    return opsgate_tenants.create_profile(
+        tenant_id,
+        frontend_root=frontend_root,
+        backend_root=backend_root,
+        description=description,
+        extra_never_access=extra_never_access,
+        business_file=business_file,
+    )
+
+
+def cmd_admin_create_tenant(argv):
+    if not argv:
+        usage("Usage: python3 tools/opsgate.py admin-create-tenant <tenant.json>")
+    data = load_data(argv[0])
+    print_json(admin_create_tenant_result(
+        data["tenant_id"],
+        frontend_root=data.get("frontend_root"),
+        backend_root=data.get("backend_root"),
+        description=data.get("description"),
+        extra_never_access=data.get("extra_never_access"),
+        business_file=data.get("business_file"),
+    ))
+
+
+def admin_list_tenants_result():
+    """Every tenant's own public profile (never token hashes - see
+    opsgate_tenants._public_profile()) - real cross-tenant visibility, which is exactly why the
+    MCP tool wrapping this calls _require_admin() first."""
+    return {"tenants": opsgate_tenants.list_profiles()}
+
+
+def cmd_admin_list_tenants(argv):
+    print_json(admin_list_tenants_result())
+
+
+def admin_issue_token_result(tenant_id, admin=False, label=None):
+    """Unlike issue_own_token_result(), this can mint a token for ANY tenant, and can set
+    admin=True - both are exactly the registry-wide capabilities an admin token is trusted with,
+    gated at the MCP layer by _require_admin(), not by any check in this function itself."""
+    token = opsgate_tenants.issue_token(tenant_id, admin=bool(admin), label=label)
+    return {
+        "tenant_id": tenant_id,
+        "token": token,
+        "admin": bool(admin),
+        "label": label,
+        "warning": "Shown once - store it now. It cannot be recovered later; issue a new one if this is lost.",
+    }
+
+
+def cmd_admin_issue_token(argv):
+    if not argv:
+        usage("Usage: python3 tools/opsgate.py admin-issue-token <tenant-id> [--admin] [--label <text>]")
+    tenant_id = argv[0]
+    rest = argv[1:]
+    admin_flag = "--admin" in rest
+    rest = [item for item in rest if item != "--admin"]
+    label = None
+    if "--label" in rest:
+        index = rest.index("--label")
+        if index + 1 >= len(rest):
+            usage("--label requires a value")
+        label = rest[index + 1]
+    print_json(admin_issue_token_result(tenant_id, admin=admin_flag, label=label))
+
+
+def admin_revoke_token_result(token):
+    """Unlike revoke_own_token_result(), this revokes `token` unconditionally - whichever
+    tenant it actually belongs to - with no ownership check, since the MCP tool wrapping this
+    calls _require_admin() first and an admin is trusted with any tenant's tokens by design."""
+    opsgate_tenants.revoke_token(token)
+    return {"revoked": True}
+
+
+def cmd_admin_revoke_token(argv):
+    if not argv:
+        usage("Usage: python3 tools/opsgate.py admin-revoke-token <token>")
+    print_json(admin_revoke_token_result(argv[0]))
+
+
 MAX_DECISION_FIELD_LENGTH = 5000  # generous for "the smallest decision needed... exact scope"
 # (replit.md's own phrasing for what a HITL answer should be) while bounding how much a single
 # call can grow one tenant's decisions.pylog - there is no other size limit on this file, since
@@ -613,18 +929,28 @@ def cmd_validate_json(argv):
 
 
 COMMANDS = {
+    "admin-create-tenant": cmd_admin_create_tenant,
+    "admin-issue-token": cmd_admin_issue_token,
+    "admin-list-tenants": cmd_admin_list_tenants,
+    "admin-revoke-token": cmd_admin_revoke_token,
     "check-capabilities": cmd_check_capabilities,
     "check-paths": cmd_check_paths,
     "compile-prompt": cmd_compile_prompt,
+    "get-run": cmd_get_run,
     "init-run": cmd_init_run,
-    "init-state": cmd_init_state,
     "intake-request": cmd_intake_request,
+    "issue-own-token": cmd_issue_own_token,
     "lint-prompt": cmd_lint_prompt,
     "lint-report": cmd_lint_report,
+    "list-audit-log": cmd_list_audit_log,
+    "list-own-tokens": cmd_list_own_tokens,
+    "list-runs": cmd_list_runs,
     "next-phase-prompt": cmd_next_phase_prompt,
     "parse-report": cmd_parse_report,
     "preflight": cmd_preflight,
+    "quota-usage": cmd_quota_usage,
     "record-decision": cmd_record_decision,
+    "revoke-own-token": cmd_revoke_own_token,
     "route-request": cmd_route_request,
     "show-profile": cmd_show_profile,
     "test-all": cmd_test_all,

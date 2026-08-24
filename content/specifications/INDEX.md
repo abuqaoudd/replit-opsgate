@@ -2,7 +2,7 @@
 
 Specification version: 7
 
-This directory defines the normative behavior of the Claude Project Prompt Engine. Root instructions remain the runtime authority; these files define the design contract used to build, audit, and evolve them.
+This directory defines the normative behavior of OpsGate. Root instructions remain the runtime authority; these files define the design contract used to build, audit, and evolve them.
 
 ## Specification map
 

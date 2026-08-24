@@ -186,7 +186,7 @@ split, not a security boundary** - both mounts sit behind the same
 identically against either path), and the gates inside each tool call are
 what actually enforce authorization either way.
 
-### `/mcp/replit/` - 7 tools
+### `/mcp/replit/` - 16 tools
 
 | Tool | Calls | Input | Output |
 |---|---|---|---|
@@ -197,25 +197,37 @@ what actually enforce authorization either way.
 | `opsgate_record_decision` | `opsgate.record_decision_result` | `hitl_id` + `answer` (strings) | JSON - **appends to `runs/<tenant-id>/decisions.pylog` on this server's machine** |
 | `opsgate_sync_instructions` | `opsgate_knowledge.project_files_manifest` | none | JSON - `{path, size}` for every file in the instruction system, no content (see below for why) |
 | `opsgate_sync_file` | `opsgate_knowledge.project_file_text` | `path` (string, from the manifest above) | JSON - `{path, content}` for that one file; the caller must write it itself, this server cannot |
+| `opsgate_list_own_tokens` | `opsgate.list_own_tokens_result` | none | JSON - label/admin flag for every token issued to the caller's own tenant, never the token values |
+| `opsgate_issue_own_token` | `opsgate.issue_own_token_result` | `label` (string, optional) | JSON - **mints and returns a new non-admin token for the caller's own tenant, shown once** |
+| `opsgate_revoke_own_token` | `opsgate.revoke_own_token_result` | `token` (string) | JSON - revokes `token` only if it belongs to the caller's own tenant, otherwise errors |
+| `opsgate_list_audit_log` | `opsgate.list_audit_log_result` | `limit` (int, optional) | JSON - the caller's own tenant's recent tool-call audit entries, most recent first |
+| `opsgate_quota_usage` | `opsgate.quota_usage_result` | none | JSON - the caller's own tenant's call volume over last hour/24h/7d plus a per-tool breakdown; **visibility only, no rate limit is enforced** |
+| `opsgate_admin_create_tenant` | `opsgate.admin_create_tenant_result` | `tenant_id` + optional profile fields | JSON - **ADMIN ONLY** (rejects a non-admin-flagged token); registers a brand-new tenant |
+| `opsgate_admin_list_tenants` | `opsgate.admin_list_tenants_result` | none | JSON - **ADMIN ONLY**; every tenant's own public profile, not just the caller's |
+| `opsgate_admin_issue_token` | `opsgate.admin_issue_token_result` | `tenant_id` + `admin`/`label` (optional) | JSON - **ADMIN ONLY**; mints a token for any tenant, optionally admin-flagged, shown once |
+| `opsgate_admin_revoke_token` | `opsgate.admin_revoke_token_result` | `token` (string) | JSON - **ADMIN ONLY**; revokes any token regardless of owning tenant, no ownership check |
 
 `opsgate_sync_instructions` returns a manifest, not file content, because the combined content (~90KB JSON-encoded as of this writing) has been observed to exceed at least one real MCP client's per-tool-result size cap (~32KB) - it truncated mid-response into invalid JSON rather than erroring cleanly. Every individual file fits comfortably under that limit, so `opsgate_sync_file` fetches one at a time instead.
 
-### `/mcp/claude/` - 15 tools (5 shared with `/mcp/replit/` above, minus its 2 Replit-only sync tools, plus 10 compiler-chain tools exclusive to this mount)
+The four `opsgate_admin_*` tools and `opsgate_quota_usage` are gated inside their own function body by `_require_admin()`/scoped to `_active_tenant_id()` respectively - a token's admin flag (`opsgate_tenants.issue_token(..., admin=True)`) is threaded through `TokenAuthMiddleware` into a `_current_is_admin` contextvar the same way `_current_tenant_id` already was, not a new authentication mechanism. A non-admin token calling an `opsgate_admin_*` tool gets a normal tool-call error (`PermissionError`), the same as any other rejected precondition in this server - never a silent no-op or a different HTTP status.
+
+### `/mcp/claude/` - 25 tools (14 shared with `/mcp/replit/` above, minus its 2 Replit-only sync tools, plus 11 compiler-chain/run-recovery tools exclusive to this mount)
 
 | Tool | Calls | Input | Output |
 |---|---|---|---|
 | `opsgate_check_capability` / `opsgate_check_paths` / `opsgate_preflight` / `opsgate_show_profile` | (shared - see left) | | |
 | `opsgate_intake_request` | `opsgate.intake_request_result` | `text` (plain sentence) | JSON |
 | `opsgate_route_request` | `opsgate.route_request` | `request` (object) | JSON |
-| `opsgate_init_state` | `opsgate.init_state_result` | `request` (object) | JSON |
 | `opsgate_init_run` | `opsgate.init_run_result` | `request` (object) | JSON - **writes `runs/<id>/` to disk on this server's machine** |
+| `opsgate_list_runs` | `opsgate.list_runs_result` | `limit` (int, optional) | JSON - the caller's own tenant's tracked runs, most recently updated first |
+| `opsgate_get_run` | `opsgate.get_run_result` | `run_id` (string) | JSON - the caller's own tenant's persisted request/route/gate_result/handoff for one run |
 | `opsgate_compile_prompt` | `opsgate.compile_prompt_text` | `request` (object) | prose text |
 | `opsgate_next_phase_prompt` | `opsgate.next_phase_prompt_text` | `run_state` + `parsed_report` (objects) | prose text |
 | `opsgate_parse_report` | `opsgate.parse_report_result` | `report_markdown` (text) | JSON |
 | `opsgate_lint_report` | `opsgate.lint_report_result` | `report_markdown` (text) | JSON |
 | `opsgate_lint_prompt` | `opsgate.lint_prompt_result` | `prompt_markdown` (text) | JSON |
 | `opsgate_export_ruleset` | `opsgate_knowledge.export_ruleset` | none | JSON - snapshot of every resource below, for offline/CI use |
-| `opsgate_record_decision` | (shared - see left) | | |
+| `opsgate_record_decision` / `opsgate_list_own_tokens` / `opsgate_issue_own_token` / `opsgate_revoke_own_token` / `opsgate_list_audit_log` / `opsgate_quota_usage` / `opsgate_admin_create_tenant` / `opsgate_admin_list_tenants` / `opsgate_admin_issue_token` / `opsgate_admin_revoke_token` | (shared - see left) | | |
 
 Every request-shaped tool above (all but `opsgate_export_ruleset`/`opsgate_sync_instructions`/`opsgate_sync_file`) resolves its profile/protected
 paths from whichever tenant resolved in Authentication above - a real tenant's own profile, or
@@ -253,7 +265,7 @@ actually names, not all of them unconditionally.
 
 - Tested end-to-end against a real request/report round-trip (route → preflight →
   check_paths violation case → compile_prompt → intake_request → record_decision →
-  lint_report → parse_report → init_state → init_run) via the official `mcp` Python
+  lint_report → parse_report → init_run) via the official `mcp` Python
   SDK's streamable-HTTP client - every tool's output matched what the equivalent
   CLI command (`python3 tools/opsgate.py <command> ...`) produces, and `init_run` /
   `record_decision`'s disk side effects (`runs/<id>/`, `runs/decisions.pylog`) were

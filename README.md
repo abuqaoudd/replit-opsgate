@@ -38,7 +38,6 @@ python3 tools/opsgate.py validate-engine
 python3 tools/opsgate.py test-all  # runs every command below against every fixture in one pass
 python3 tools/opsgate.py route-request routing:frontend-task
 python3 tools/opsgate.py compile-prompt routing:frontend-task
-python3 tools/opsgate.py init-state routing:migration-task-missing-auth
 python3 tools/opsgate.py parse-report fixtures/reports/sample-replit-final-report.md
 python3 tools/opsgate.py intake-request "Audit the Roles module without changing code"
 python3 tools/opsgate.py next-phase-prompt state:ready-phased-state reports:parsed-sample-report

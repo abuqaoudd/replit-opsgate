@@ -2,6 +2,328 @@
 
 ## Unreleased
 
+### Remaining audit findings closed out - 2026-08-24
+
+Every remaining item from the adversarial audit pass is now fixed, each with permanent
+regression coverage, not just patched.
+
+- **Prompt injection via unsanitized capability fallback (HIGH, pre-existing)**: for any replit
+  route with no configured `capability`, `route_request()` falls back to the first raw key of
+  the caller-supplied `authorizations` dict - unlike every other caller-supplied field, this was
+  embedded directly into the compiled prompt's routing table with no fencing/sanitization.
+  `tools/opsgate_prompts.py`'s `compile_replit_prompt()` now runs it through
+  `sanitize_inline_text()` like every sibling inline field. Verified a crafted `authorizations`
+  key can no longer inject a fake markdown heading; regression coverage added to
+  `opsgate_selftest.py`'s injection-check block.
+- **`limit=0`/negative `limit` silently misbehaving (HIGH)**: `opsgate_list_runs`/
+  `opsgate_list_audit_log` treated `limit=0` as "not specified" (0 is falsy in Python) and
+  returned the default page size instead of zero results, and a negative limit silently dropped
+  items via Python's negative-slice semantics instead of erroring. New shared
+  `_normalize_limit()` helper in `tools/opsgate.py` treats `None` as "use the default" and any
+  explicit value - including 0 - as a real request, rejecting negative values outright. Also
+  fixed a second, related bug this surfaced: `list_audit_log_result`'s `entries[-limit:]` would
+  have returned *all* entries for `limit == 0` regardless of normalization, since Python's
+  `list[-0:]` is `list[0:]` (all items), not zero. Added a `--limit` CLI flag to both commands
+  (previously MCP-only) so both edge cases have direct regression tests, not just via the full
+  MCP stack.
+- **`capability_authorized()` crashing on malformed input (HIGH)**: a caller sending
+  `authorizations: {"some_cap": true}` (a bare boolean, an easy typo for `{"authorized": true}`)
+  raised an unhandled `AttributeError` from `opsgate_route_request`/`opsgate_check_capability`/
+  `opsgate_preflight`, since no schema validation runs ahead of routing. Now fails closed
+  (treated as not authorized) instead of crashing. New regression fixture
+  `fixtures/routing/malformed-authorization-value.json`.
+- **`get_run_result` vs `list_runs_result` error-handling asymmetry (MEDIUM)**: `get_run_result`
+  had no handling for a corrupted/partially-written run file (e.g. from a crash mid-write)
+  while its sibling did. `get_run_result` is the authoritative single-run recovery path, so it
+  now raises a clear, named error identifying exactly which file is corrupted, rather than
+  either crashing with a raw traceback or silently returning `None` indistinguishable from "this
+  file was never written." `list_runs_result`'s quieter best-effort degradation (appropriate for
+  a summary across many runs) is unchanged. Regression test simulates a real truncated-file
+  scenario via `opsgate_selftest.py`.
+- **Delta-spec detection false positives/negatives (MEDIUM)**: matching the bare word "delta"
+  anywhere in the request text falsely triggered the delta-spec compiled body for unrelated
+  requests (a module literally named "Delta", "delta-neutral hedge calculation"). Tightened to
+  require the two-word phrase "delta spec"/"delta specification" - the same phrase
+  `ROUTING_MANIFEST`'s own signal list already uses to route here in the first place, so this is
+  now internally consistent rather than just narrower. Both false positives verified fixed and
+  both real phrasings verified still detected; new fixture
+  `fixtures/routing/specification-bare-delta-word.json`. The harder gap - a genuine delta
+  request that uses neither phrase - remains open; there is no better signal available in the
+  request schema today.
+- **`revoke_token()`'s `!=` instead of `hmac.compare_digest` (LOW)**: fixed for consistency with
+  every other hash comparison in this codebase, same low-risk reasoning
+  `resolve_tenant_from_token()`'s own comment already gives (comparing hashes, not secrets).
+- **Test-coverage gaps closed**: `opsgate_admin_issue_token` - the single most
+  privilege-sensitive tool added this session - had no test asserting it rejects a non-admin
+  token, unlike its three siblings; added. `revoke_own_token_result`'s ownership-check branch
+  and `issue_token()`'s unknown-tenant error path were previously exercised only end-to-end
+  through the full MCP server; added direct unit-level coverage in `test_opsgate_tenants.py`.
+  Three cross-tenant isolation assertions (`opsgate_list_runs`/`opsgate_list_audit_log`/
+  `opsgate_quota_usage`) only checked that a specific known item from tenant B was absent from
+  tenant A's response - strengthened to assert every item in A's response is actually
+  attributed to A, which a leak of some *other* tenant's data would have passed under the
+  narrower check.
+- Full suite after all of the above: `validate-engine` 0 warnings, `test-all` 82/82 (up from 67),
+  `test_opsgate_tenants` 33/33 (up from 28), `test_opsgate_knowledge` 228/228,
+  `test_opsgate_mcp_integration` 77/77 (up from 76).
+
+### Critical: cross-tenant/cross-privilege session hijacking, closed via stateless_http - 2026-08-24
+
+Found by a dedicated adversarial security-audit pass (4 parallel review angles: security,
+correctness, cross-tenant isolation, test-coverage quality) requested ahead of a planned
+production-infrastructure migration. This is the most severe finding this engine has had to
+date - live and exploitable on the currently-deployed server, not merely a pre-migration
+concern - confirmed against a real running instance before being fixed, not theoretical.
+
+- **The bug**: in the SDK's default stateful mode, a new MCP session spawns one long-lived task
+  that services every later request carrying that session's `Mcp-Session-Id`, regardless of
+  which token authenticates those later requests. Python's `contextvars` do not propagate
+  across tasks, so `TokenAuthMiddleware` setting `_current_tenant_id`/`_current_is_admin` fresh
+  on each incoming HTTP request had no effect on a session's own task, which kept running with
+  whatever identity was current when that session was first created. The `mcp` SDK has a
+  built-in guard against exactly this (a session may only be reused by the credential that
+  created it), but it only activates when the app is constructed with a real auth provider
+  populating `scope["user"]` - this server authenticates via its own `TokenAuthMiddleware`
+  instead, so that guard silently never activated. Net effect: any valid tenant token could
+  resume any other tenant's - or an admin's - existing session simply by presenting its session
+  ID, inheriting that session's tenant identity and admin status for every tool call made
+  through it.
+- **Verified exploitable, then verified fixed, both against a real running instance**: a
+  reproduction opened a session as tenant A, then sent a separate request authenticated with
+  tenant B's own valid token but reusing A's session ID - the server returned tenant A's profile
+  data. The same reproduction against the fixed server, and a second one using a wholly
+  fabricated session ID never issued by the server, both correctly resolved to the requesting
+  token's own tenant every time.
+- **Fix**: both `FastMCP` instances (`mcp_replit`, `mcp_claude`) now construct with
+  `stateless_http=True`. Every request gets its own fresh transport and task, spawned from (and
+  inheriting the contextvars of) the very request handling it - there is no session identity
+  left to hijack, because there is no persistent session at all. This has no functional
+  downside for this server specifically: every piece of cross-call state this engine needs
+  already lives on disk (`runs/<tenant_id>/`, `tenants/registry.json`, `decisions.pylog`) by
+  design, precisely because Replit's own sessions are disposable - in-memory MCP session
+  continuity was never load-bearing for anything here. Confirmed via the full real-server
+  integration suite (76/76, up from 75) that the normal initialize-then-call client flow is
+  unaffected.
+- Permanent regression coverage added: `tests/test_opsgate_mcp_integration.py` now sends a
+  request with a completely fabricated `Mcp-Session-Id` and asserts it resolves strictly to the
+  requesting token's own tenant, never leaking a different one.
+- Full suite after: `validate-engine` 0 warnings, `test-all` 67/67, `test_opsgate_tenants` 28/28,
+  `test_opsgate_knowledge` 228/228, `test_opsgate_mcp_integration` 76/76.
+- **Also found by the same audit pass, not yet fixed** (see the audit report for full detail):
+  a pre-existing prompt-injection gap where a compiled prompt's capability field can fall back
+  to an unsanitized, caller-supplied `authorizations` dict key for routes with no configured
+  capability; `opsgate_list_runs`/`opsgate_list_audit_log` silently misbehave on `limit=0`
+  (returns the default instead of zero results) or a negative `limit` (silently drops items via
+  Python's negative-slice semantics); `capability_authorized()` raises an unhandled
+  `AttributeError` on a malformed non-object `authorizations` entry; `get_run_result` lacks the
+  corrupted-file error handling its sibling `list_runs_result` has; delta-spec detection
+  (bare-word "delta" matching) has real false positives/negatives with no better signal
+  currently available in the request schema; `opsgate_admin_issue_token` has no regression test
+  for rejecting a non-admin token, unlike its three sibling admin tools.
+
+### Admin tenant provisioning and quota visibility - the two remaining tool-audit gaps - 2026-08-24
+
+Closes the two items deliberately left unbuilt earlier this session, after explicit direction:
+admin-gated tenant creation/token issuance (delete intentionally excluded, stays CLI-only) and
+quota visibility (no enforcement - there is still no rate limiting anywhere in this server).
+
+- **Admin authority wiring, real and end-to-end tested**: `opsgate_tenants.resolve_tenant()`'s
+  admin-override concept existed in code but had no caller anywhere in the live MCP server (a
+  real, pre-existing gap). `TokenAuthMiddleware` now threads a token's admin flag into a new
+  `_current_is_admin` contextvar the same way it already threads tenant_id - not a new
+  authentication mechanism, the same resolution call already made just no longer discarding
+  half its return value. A new `_require_admin()` guard (raises `PermissionError`, surfaced as a
+  normal tool-call error) gates every admin tool before it touches the registry.
+- **Four admin-gated tools** (`opsgate_admin_create_tenant`, `opsgate_admin_list_tenants`,
+  `opsgate_admin_issue_token`, `opsgate_admin_revoke_token`, all shared/both mounts): register a
+  brand-new tenant, list every tenant's profile (not just the caller's own), mint a token for
+  *any* tenant (optionally admin-flagged itself), and revoke *any* token with no ownership check
+  - all deliberately different from the self-service `opsgate_*_own_*` tools added earlier today,
+  which only ever act on the caller's own tenant. `opsgate_admin_create_tenant` intentionally has
+  no `opsgate_admin_delete_tenant` counterpart - deleting a tenant wipes its whole profile and
+  revokes every one of its tokens in one irreversible call, and stays Python-API/CLI-only by
+  explicit choice rather than exposed remotely.
+- **Quota visibility, no enforcement** (`opsgate_quota_usage`, shared/both mounts): reports the
+  caller's own tenant's call volume over last-hour/24h/7d windows plus a per-tool breakdown,
+  computed from the same `runs/audit.jsonl` `opsgate_list_audit_log` reads. Exists to inform a
+  real rate-limit decision with actual usage data later, not to enforce a threshold invented with
+  none - there is still no rate limiting anywhere in this server, stated explicitly in the tool's
+  own response (`"note"` field) so this isn't mistaken for one.
+- New tools total: `/mcp/replit/` 11 -> 16, `/mcp/claude/` 20 -> 25 (14 tools now shared between
+  both mounts, up from 9). Regression coverage: direct Python-level checks of every new
+  `admin_*_result`/`quota_usage_result` function, a `test-all` smoke test for `quota-usage`, and
+  11 new checks in `test_opsgate_mcp_integration.py` against the real running server - every
+  admin tool tested for both a non-admin-token rejection AND a real admin-token success
+  (including issuing a token for a *different* tenant than the admin's own and confirming it
+  actually resolves to that tenant, then revoking it), plus quota cross-tenant isolation.
+- Documentation updated to match: `mcp-server/README.md`'s two tool tables plus a new paragraph
+  explaining the admin-gating mechanism, `content/references/CLAUDE_MCP_WORKFLOW.md`'s "Other
+  tools available" section, `mcp-server/opsgate_mcp_server.py`'s module docstring.
+- Full suite after: `validate-engine` 0 warnings, `test-all` 67/67 (up from 66),
+  `test_opsgate_tenants` 28/28, `test_opsgate_knowledge` 228/228,
+  `test_opsgate_mcp_integration` 75/75 (up from 64).
+
+### Six new tools: self-service token rotation, run recovery, tenant-scoped audit-log reading - 2026-08-24
+
+Closes three of the four gaps flagged by the tool audit earlier this session (MCP-exposed
+tenant provisioning, no observability read-back, no run-listing/recovery) - scoped down to what
+is safe to build without inventing a new authority model, rather than building the full,
+higher-risk version of each. Full cross-tenant tenant *creation* over MCP and a quota/rate-limit
+surface remain deliberately unbuilt (see below) - both are open design decisions, not missing
+plumbing.
+
+- **Self-service token rotation** (`opsgate_list_own_tokens`, `opsgate_issue_own_token`,
+  `opsgate_revoke_own_token`, all shared/both mounts): every one of these acts only on the
+  caller's own resolved tenant - the same scoping pattern every existing tool already uses, so
+  no new admin/override wiring was needed. Two real safety properties, each verified with a
+  dedicated adversarial test: `opsgate_issue_own_token` can never mint an admin-flagged token
+  regardless of what a caller asks for (admin=True would let a token address another tenant's
+  profile via `opsgate_tenants.resolve_tenant()`'s existing override path); `opsgate_revoke_own_token`
+  checks the target token's actual owning tenant before revoking, because
+  `opsgate_tenants.revoke_token()` itself has no tenant scoping at all - it searches every
+  tenant for a matching hash - so wrapping it with no ownership check would have let any
+  authenticated caller revoke a token belonging to a different tenant.
+- **Run recovery** (`opsgate_list_runs`, `opsgate_get_run`, Claude-only, matching
+  `opsgate_init_run`'s own mount): reads back what `opsgate_init_run` persists to
+  `runs/<tenant_id>/<run_id>/` - previously write-only from MCP, recoverable only by reading the
+  server's filesystem directly. Files are read via `ast.literal_eval` on the `VARNAME = <literal>`
+  pattern `write_python_data()` produces, not `exec()`/`import` - a reader exposed to an MCP
+  caller shouldn't execute file content as code even though today's writer only ever produces
+  safe literals. Capped at 200 runs per call (`MAX_LIST_LIMIT`) regardless of what a caller asks
+  for, so a long run history can't force one call to return an unbounded amount of data.
+- **Tenant-scoped audit-log reading** (`opsgate_list_audit_log`, shared/both mounts): reads
+  `runs/audit.jsonl` - a single file shared across every tenant - and filters to only the
+  caller's own entries before returning them; the file itself has no per-tenant separation on
+  disk (unlike `runs/<tenant_id>/` or `decisions.pylog`), so this filtering is a real, tested
+  isolation boundary, not a formality.
+- New tools total: `/mcp/replit/` 7 -> 11, `/mcp/claude/` 14 -> 20 (9 tools now shared between
+  both mounts, up from 5). Regression coverage added at every level: direct Python-level checks
+  of the new `*_result` functions including cross-tenant rejection, a `test-all` smoke-test
+  addition (`list-runs`/`get-run`/`list-audit-log` against the CLI), and 14 new adversarial
+  checks in `test_opsgate_mcp_integration.py` against the real running server with two real
+  tenants (issue/list/cross-tenant-revoke-rejected/own-revoke-succeeds for tokens;
+  list/get-run with cross-tenant leak checks; audit-log cross-tenant leak checks).
+- **Deliberately not built, and why**: full tenant *creation* via MCP (as opposed to the
+  self-service token rotation above) would require wiring the admin-override authority that
+  already exists in `opsgate_tenants.resolve_tenant()` but has no caller anywhere in the live
+  MCP server (a real, pre-existing gap, not new) - a genuine authorization-model decision, not
+  something to bolt on inside an unrelated tool-audit pass. A quota/rate-limit surface has no
+  existing tracking mechanism to expose at all (there is currently no rate limiting anywhere in
+  this server) - building one is a real feature, not a missing read-only tool. Both remain open
+  items for the production-infrastructure phase, not silently dropped.
+- Documentation updated to match: `content/references/CLAUDE_MCP_WORKFLOW.md`'s "Other tools
+  available" section, `mcp-server/README.md`'s two tool tables and mount-summary line,
+  `mcp-server/opsgate_mcp_server.py`'s module docstring. `replit.md`/`CLAUDE.md`'s Section 9 was
+  deliberately left alone - it is non-exhaustive prose specifically about the Mandatory HITL
+  Gate's own tools, not a tool catalog, and these six additions aren't gate tools.
+- Full suite after: `validate-engine` 0 warnings, `test-all` 66/66 (up from 62),
+  `test_opsgate_tenants` 28/28, `test_opsgate_knowledge` 228/228,
+  `test_opsgate_mcp_integration` 64/64 (up from 51).
+
+### Spec/business-file compiled prompts brought back in line with real production specs - 2026-08-24
+
+- **Verified against 29 real spec/delta-spec files from a live tenant** (not assumed): the full
+  `content/templates/SPEC_FILE_PROMPT_TEMPLATE.md`/`BUSINESS_FILE_PROMPT_TEMPLATE.md` were
+  already current - their 16/14-section structure and `BUS-CAP-*`/`BUS-REQ-*`/`BUS-RULE-*` ID
+  scheme match the heavier spec convention that became the tenant's exclusive style for every
+  new spec from mid-August onward, evidenced by cross-referencing all 29 files' dates against
+  their structure. The real gap was in `tools/opsgate_prompts.py::compile_artifact_prompt()` -
+  the condensed body actually sent to an implementing agent (templates themselves are never read
+  verbatim by code) - which had silently dropped sections every real spec in the corpus
+  contains: State Transitions, Architecture Boundaries/Prohibited Changes, and the Instruction
+  Object Contract from the specification body; `BUS-REQ-*` (atomic business requirements,
+  distinct from `BUS-CAP-*`) from the business-file body. Neither compiled body named the
+  `DEC-*`/`OQ-*` ID prefixes every real spec uses for decisions/open questions.
+- **Added delta-spec detection and a dedicated compiled body**: previously a "delta spec"
+  request routed to the exact same generic specification body as a fresh spec, with zero
+  awareness it was a delta. Every real delta file in the corpus (regardless of which of the two
+  base-spec generations it belonged to) followed a consistent, distinct shape - a
+  Summary-of-Changes table, one section per `D-*` change explicitly labeled
+  corrected/new/superseded against a named prior section/ID, a scoped-to-just-the-delta data
+  section, and an Acceptance Criteria Addendum rather than a full acceptance criteria section.
+  `compile_artifact_prompt()` now detects "delta" in the request's module/outcome text (same
+  word-aware `opsgate_lexer.lexical_contains` pattern used elsewhere) and compiles that
+  structure instead of the fresh-spec one. Regression coverage:
+  `fixtures/routing/specification-request.json` and
+  `fixtures/routing/specification-delta-request.json` (`tools/opsgate_fixtures.py`), plus a new
+  `validate-engine` check asserting the two compiled bodies are genuinely distinct (not just
+  both present).
+- **Real, evidenced (not invented) filename-convention finding**: the corpus uses two
+  live delta-filename patterns (`spec-[module]-delta-YYYYMMDD.md` and
+  `spec-[module]-YYYY-MM-DD.md`), and at least one file (`spec-reports-2026-08-19.md`) is
+  itself a delta despite its filename giving no indication of that - `SPEC_FILE_PROMPT_TEMPLATE.md`'s
+  "Delta spec generation" section now documents both patterns and states plainly that
+  delta-or-full status must come from the document's own frontmatter/title, never be inferred
+  from the filename.
+- Added frontmatter guidance (feature/module name plus backend/frontend/database/OpenAPI
+  involvement flags) to `SPEC_FILE_PROMPT_TEMPLATE.md`'s Document Control item - every one of
+  the 29 real files except two early outliers uses this frontmatter block.
+- **Not fixed, flagged instead**: roughly half the corpus (auth, clients, certifications,
+  projects, roles, users, locations, notifications, suppliers, timesheets, and one of two
+  competing `forms` spec files) is still on the tenant's own older, leaner spec convention
+  (Business Description/Technical Requirements/Backend Routes/Database Changes/checkbox
+  Acceptance Criteria, `BR-*` IDs) predating the switch to the heavier convention - this is the
+  tenant's own documentation debt, not an OpsGate template problem, and out of scope here.
+- Full suite after: `validate-engine` 0 warnings, `test-all` 62/62 (up from 54),
+  `test_opsgate_tenants` 28/28, `test_opsgate_knowledge` 228/228,
+  `test_opsgate_mcp_integration` 51/51.
+
+### Business file template confirmed against 21 real business files, two refinements - 2026-08-24
+
+- **Second verification pass, same day**: the same tenant provided 21 real business files
+  (`docs/Business/*.md`), closing the one open gap from the spec verification above (previously
+  only specs *citing* a business file were available, not one directly). Confirms
+  `BUSINESS_FILE_PROMPT_TEMPLATE.md`'s 14-item structure directly - not just its ID scheme -
+  against the newest business-file generation (`my-profile.md`, `audit-trail.md`,
+  `Clientportal.md`, `Reports.md`): section titles and order match almost verbatim, and
+  `audit-trail.md` explicitly cites having been generated from
+  `metco-kit/dist/chatgpt/templates/METCO_BUSINESS_FILE_PROMPT_TEMPLATE.md` - direct confirmation
+  this template is the live generating source, not a stale guess at one. The older module-level
+  business docs (`auth.md`, `clients.md`, `certifications.md`, and the rest of the modules still
+  on the leaner spec convention) use a third, distinct convention entirely (Overview/User
+  Stories/Business Rules/Data Model/API Endpoints/UI Components, `US-*`/`BR-*` IDs, no
+  `BUS-CAP-*`/`BUS-REQ-*` concept) - the same tenant-side documentation debt already flagged
+  above, not a second template problem.
+- **Two small, evidenced refinements** found from the real files: added `REC-*` as the stable ID
+  prefix for recommendations (`BUSINESS_FILE_PROMPT_TEMPLATE.md` item 14 and the matching
+  `compile_artifact_prompt()` business-file body in `tools/opsgate_prompts.py`) and `DRIFT-*` for
+  confirmed discrepancies found during a module audit against an existing business file
+  (`BUSINESS_FILE_PROMPT_TEMPLATE.md`'s "Module audit update" section) - both real, consistently
+  used ID prefixes in the corpus (e.g. `audit-trail.md`'s `REC-AT-*`/`DRIFT-AT-*`) that neither
+  template nor compiled body named before.
+- Full suite after: `validate-engine` 0 warnings, `test-all` 62/62, `test_opsgate_tenants` 28/28,
+  `test_opsgate_knowledge` 228/228, `test_opsgate_mcp_integration` 51/51.
+
+### Capability-gate consistency fix, `opsgate_init_state` removal - 2026-08-24
+
+- **Real bug found and fixed**: `opsgate_check_capability` (`check_capabilities_result`) and
+  `opsgate_preflight`/`opsgate_route_request` (`route_request`'s `missing_authority`/`blocked`
+  computation) independently re-derived "does this capability need explicit authorization" and
+  disagreed on the same request - `check_capabilities_result` only required authorization when a
+  capability's gate defaulted to `"blocked"`, while `route_request` also blocked on any explicit
+  `authorized: false` regardless of the gate's own default. A request that explicitly marked an
+  allowed-by-default capability (e.g. `ordinary_application_change`) as unauthorized got
+  `can_proceed: true` from one tool and `blocked: true` from the other. Fixed by extracting one
+  shared `capability_authorized()` helper (`tools/opsgate_routing.py`) used by both, and adding
+  regression coverage: `fixtures/routing/open-capability-explicit-false.json`
+  (`tools/opsgate_fixtures.py`) plus the existing `test-all` cross-check that `preflight`/
+  `check-capabilities` exit codes agree with `route_request`'s own `blocked` decision.
+- **Removed `opsgate_init_state`/`init_state_result`** (tool, CLI command, and all references) -
+  dead weight from an earlier design: it produced a canned two-phase (`PHASE-0`/`PHASE-1`)
+  run-state scaffold that never matched how phased execution actually works (Replit produces its
+  own dynamic phase plan per `compile_replit_prompt`'s own instruction), was never mentioned in
+  `content/references/CLAUDE_MCP_WORKFLOW.md`'s tool chain, and was only ever listed (never
+  invoked with assertions) in the MCP integration test. `opsgate_init_run` remains the tool that
+  actually persists run state to disk. The one regression test that depended on its output (a
+  blocked run must not look phase-ready) was rewritten to construct the blocked run-state object
+  directly, since `next_phase_prompt_text`'s blocked-refusal only ever reads `status`/
+  `missing_authority`, not anything `init_state_result` alone produced.
+- Fixed a stale name in `content/specifications/INDEX.md` ("Claude Project Prompt Engine" ->
+  "OpsGate"), missed by the 7.0.0 rename pass.
+- Full suite after: `validate-engine` 0 warnings, `test-all` 54/54 (up from 50, the new fixture),
+  `test_opsgate_tenants` 28/28, `test_opsgate_knowledge` 228/228,
+  `test_opsgate_mcp_integration` 51/51 (`/mcp/claude` now correctly lists 14 tools, not 15).
+
 ### Stop the Claude MCP workflow from firing on unrelated requests - 2026-08-20
 
 - **Problem**: once the org-level Connector (or a `claude mcp add` connection) is live, its

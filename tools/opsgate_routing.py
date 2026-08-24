@@ -39,6 +39,24 @@ def unique(items):
     return out
 
 
+def capability_authorized(capability, authorizations, gates):
+    """A capability needs explicit authorization only if its gate's own default posture is
+    "blocked" - an "allowed_when_scoped"/"read_only" capability is authorized by default, and
+    an explicit authorized:false on one of those must not block it either. This is the single
+    definition of "is this capability cleared to proceed", shared by route_request's
+    missing_authority/blocked computation and opsgate.check_capabilities_result so the two
+    can never disagree about the same request (they used to: check_capabilities_result only
+    checked the gate's default, route_request also flagged any explicit authorized:false
+    regardless of default). A malformed entry (e.g. `{"cap": true}` instead of the required
+    `{"cap": {"authorized": true}}`) is treated as not authorized rather than raising -
+    REQUEST_SCHEMA isn't enforced automatically ahead of routing, so this is real caller input
+    to fail closed on, not an invariant this function can assume."""
+    if (gates.get(capability) or {}).get("default") != "blocked":
+        return True
+    auth = (authorizations or {}).get(capability)
+    return isinstance(auth, dict) and auth.get("authorized") is True
+
+
 def route_request(request, tenant_id=None):
     routing = read_json("manifests/routing.manifest.json")
     gates = read_json("manifests/capability-gates.json")
@@ -81,12 +99,13 @@ def route_request(request, tenant_id=None):
 
     missing_authority = []
     authorizations = request.get("authorizations") or {}
-    if replit and replit.get("capability") and replit["capability"] in gates:
-        auth = authorizations.get(replit["capability"]) or {}
-        if not auth.get("authorized"):
-            missing_authority.extend(gates[replit["capability"]].get("requires", []))
-    for capability, auth in authorizations.items():
-        if capability != (replit or {}).get("capability") and capability in gates and auth.get("authorized") is False:
+    capability_candidates = set(authorizations.keys())
+    if replit and replit.get("capability"):
+        capability_candidates.add(replit["capability"])
+    for capability in capability_candidates:
+        if capability not in gates:
+            continue
+        if not capability_authorized(capability, authorizations, gates):
             missing_authority.extend(gates[capability].get("requires", []))
 
     profile_record = opsgate_tenants.get_profile(tenant_id) or {}

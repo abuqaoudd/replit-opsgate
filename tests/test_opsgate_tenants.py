@@ -160,6 +160,34 @@ def main():
             "MCP mode" not in opsgate.compile_prompt_text(override_request, tenant_id="acme"),
         )
 
+        # --- Direct unit-level coverage for revoke_own_token_result()'s ownership check - real
+        # branching logic (checking the token's true owner before calling the unscoped
+        # opsgate_tenants.revoke_token()), previously exercised only end-to-end through the full
+        # MCP server in test_opsgate_mcp_integration.py, not at this direct/faster level.
+        rotation_token = tenants.issue_token("acme", label="rotation-check")
+        try:
+            opsgate.revoke_own_token_result(rotation_token, tenant_id="globex")
+            record("revoke_own_token_result rejects a token belonging to a different tenant", False)
+        except tenants.TenantError:
+            record("revoke_own_token_result rejects a token belonging to a different tenant", True)
+        record("the token survives a failed cross-tenant revoke attempt", tenants.resolve_tenant(rotation_token) == "acme")
+        opsgate.revoke_own_token_result(rotation_token, tenant_id="acme")
+        record("revoke_own_token_result succeeds for the token's own tenant", tenants.resolve_tenant(rotation_token) is None)
+
+        # --- issue_token()'s unknown-tenant TenantError, exercised through both wrappers that
+        # sit in front of it (previously untested through either, only against issue_token()
+        # itself indirectly via list_tokens' own unknown-tenant test).
+        try:
+            opsgate.issue_own_token_result(tenant_id="no-such-tenant-at-all")
+            record("issue_own_token_result raises on an unknown tenant", False)
+        except tenants.TenantError:
+            record("issue_own_token_result raises on an unknown tenant", True)
+        try:
+            opsgate.admin_issue_token_result("no-such-tenant-at-all")
+            record("admin_issue_token_result raises on an unknown tenant", False)
+        except tenants.TenantError:
+            record("admin_issue_token_result raises on an unknown tenant", True)
+
     failed = [name for name, passed, _ in RESULTS if not passed]
     print(f"\n{len(RESULTS) - len(failed)}/{len(RESULTS)} checks passed.")
     if failed:
