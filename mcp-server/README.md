@@ -93,6 +93,96 @@ and re-launching the process; `KeepAlive` brings it straight back up. The plist 
 (`mcp-server/com.opsgate.mcpserver.plist`) is only read at `bootstrap`/`load` time - editing it
 requires `bootout` then `bootstrap` again, not `kickstart`, for the change to take effect.
 
+## Docker
+
+`Dockerfile`, `docker-compose.yml`, and `.dockerignore` at the repository root package this
+server as a container. The build context is the repository root, not `mcp-server/`, because the
+server imports the engine from the sibling `tools/` folder, reads `content/**` live, and
+persists state under `tenants/` and `runs/` at the repository root - the repo layout *is* the
+runtime layout, mirrored one-to-one under `/app` in the image.
+
+What the image does and does not contain:
+
+- **Baked in**: `mcp-server/`, `tools/`, `content/`, `fixtures/`, `package.py`. A change to any
+  of these is a rebuild (`docker compose up -d --build`).
+- **Never baked in** (`.dockerignore`): `mcp-server/.env` (real secrets), `tenants/` and `runs/`
+  (live state), `.git/`, `.venv/`, `tests/`, `docs/`. The image contains no credentials and no
+  tenant data - it is safe to push to a registry.
+- **Runs as an unprivileged user** (`opsgate`, uid 10001). `tenants/registry.json` is chmod'ed to
+  `0600` on every save, so the state directories must be writable by that uid - the named
+  volumes below inherit the right ownership automatically on first mount. If you use bind
+  mounts instead, `chown -R 10001:10001` them first.
+- **Binds `0.0.0.0` inside the container** (`OPSGATE_MCP_HOST`), because a published port cannot
+  reach a loopback-only process. This does not widen what the server answers to: the mcp SDK's
+  DNS-rebinding protection still rejects any `Host` header other than `127.0.0.1`/`localhost`
+  and whatever `OPSGATE_MCP_ALLOWED_HOSTS` lists. Compose publishes the port on
+  `127.0.0.1:8765` only, so the container is reachable from the host but not from the network
+  - put a TLS-terminating reverse proxy in front of it, exactly as the Tailscale Funnel sits in
+  front of the current process.
+
+### Run with compose
+
+```bash
+cp mcp-server/.env.example mcp-server/.env   # fill in OPSGATE_MCP_TOKEN, OPSGATE_MCP_ALLOWED_HOSTS, OAuth values
+docker compose up -d --build
+curl -s http://127.0.0.1:8765/health          # {"status":"ok"}
+```
+
+`docker-compose.yml` reads `mcp-server/.env` through `env_file` - the same file, same keys,
+as the non-container deployment (`.env.example` documents every one). State lives in two named
+volumes, `opsgate-tenants` and `opsgate-runs`. They are plain files, not a database: losing
+them loses every tenant, token hash, run, decision, and audit entry, so back them up like any
+other stateful volume.
+
+### First run: provision a tenant
+
+A fresh volume has no tenants. Use the engine CLI *inside the container*, so it writes to the
+mounted volume rather than to the host checkout:
+
+```bash
+# 1. Register the tenant (a JSON file with tenant_id, frontend_root, backend_root, optional
+#    extra_never_access / business_file / description - see tools/opsgate.py admin-create-tenant).
+#    The CLI resolves its argument to a real path, so /dev/stdin does not work - write the JSON
+#    to a file inside the container first. `-T` disables the pseudo-TTY so stdin pipes through.
+docker compose exec -T opsgate-mcp sh -c 'cat > /tmp/tenant.json && python tools/opsgate.py admin-create-tenant /tmp/tenant.json' <<'EOF'
+{"tenant_id": "my-project", "frontend_root": "client/src", "backend_root": "server"}
+EOF
+
+# 2. Mint one token per consumer. The plaintext is printed exactly once - only its hash is stored.
+docker compose exec opsgate-mcp python tools/opsgate.py admin-issue-token my-project --label claude
+docker compose exec opsgate-mcp python tools/opsgate.py admin-issue-token my-project --label replit
+```
+
+Then verify the token resolves to the right tenant before handing it to a client:
+
+```bash
+curl -s -H "X-Opsgate-Token: <token>" -H "Accept: application/json, text/event-stream" \
+  -H "Content-Type: application/json" http://127.0.0.1:8765/mcp/replit/ \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"smoke","version":"0"}}}'
+```
+
+A `200` with a `serverInfo` payload confirms authentication and the mount; a `401` means the
+token did not resolve; a `421` means the `Host` header you used is not in
+`OPSGATE_MCP_ALLOWED_HOSTS`.
+
+### Operations
+
+- **Logs**: `docker compose logs -f opsgate-mcp` (uvicorn access log + the server's own stderr).
+  The structured per-tool-call audit log is `runs/audit.jsonl` *inside the `opsgate-runs`
+  volume*, not in the container log.
+- **Restart after a code change**: `docker compose up -d --build`. A change under `content/**`
+  also needs a rebuild here, because content is baked into the image (unlike the bare-process
+  deployment, where it is read live from the checkout). To keep content hot-editable, bind-mount
+  it read-only instead: add `- ./content:/app/content:ro` under `volumes`.
+- **Health**: the container's `HEALTHCHECK` hits `GET /health`, which also confirms
+  `tenants/registry.json` parses - a corrupted registry shows as `unhealthy`, not just as a
+  process that answers HTTP.
+- **Migrating existing state in**: copy the current `tenants/registry.json` and `runs/**` into
+  the volumes (`docker compose cp tenants/registry.json opsgate-mcp:/app/tenants/` and the same
+  for `runs/`), then `docker compose exec opsgate-mcp chmod 600 tenants/registry.json`. This is
+  the one true state migration described in the technical documentation's hosting section;
+  everything else is a fresh code deploy.
+
 ## Authentication
 
 Every request must carry an `X-Opsgate-Token: <token>` header, checked by a

@@ -1,0 +1,50 @@
+# OpsGate MCP server - compose deployment.
+#
+#   cp mcp-server/.env.example mcp-server/.env   # then fill in real values
+#   docker compose up -d --build
+#   curl -s http://127.0.0.1:8765/health          # -> {"status":"ok"}
+#
+# The port is published on loopback only: this service is meant to sit behind a TLS-terminating
+# reverse proxy (Caddy, nginx, a load balancer) on the same host, matching the existing
+# 127.0.0.1-plus-tunnel shape. Set OPSGATE_MCP_ALLOWED_HOSTS to the proxy's public hostname or
+# every proxied request is rejected with 421 by the mcp SDK's DNS-rebinding protection.
+#
+# See mcp-server/README.md ("Docker") for first-run tenant provisioning and operations.
+
+services:
+  opsgate-mcp:
+    build: .
+    image: opsgate-mcp:7.1.0
+    container_name: opsgate-mcp
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8765:8765"
+    # All configuration comes from the environment. mcp-server/.env is the same file the
+    # non-container deployment uses (see mcp-server/.env.example for every key); it is
+    # gitignored and excluded from the image by .dockerignore, so it only ever reaches the
+    # container through this env_file entry.
+    env_file:
+      - mcp-server/.env
+    environment:
+      OPSGATE_MCP_HOST: "0.0.0.0"
+      OPSGATE_MCP_PORT: "8765"
+    volumes:
+      # The two pieces of persistent state. Both are plain files, not a database - losing these
+      # volumes loses every tenant, token hash, run, decision, and audit entry.
+      - opsgate-tenants:/app/tenants
+      - opsgate-runs:/app/runs
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys, urllib.request; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8765/health', timeout=4).status == 200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+volumes:
+  opsgate-tenants:
+  opsgate-runs:

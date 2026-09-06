@@ -2,6 +2,37 @@
 
 ## Unreleased
 
+### Container packaging for the MCP server - 2026-09-06
+
+`Dockerfile`, `docker-compose.yml`, and `.dockerignore` at the repository root package
+`mcp-server/opsgate_mcp_server.py` as a container, for deployment off the current
+single-machine launchd setup.
+
+- **Build context is the repository root**, mirrored one-to-one under `/app`: the server imports
+  the engine from the sibling `tools/`, reads `content/**` live, and persists state under
+  `tenants/` and `runs/`, so the repo layout is the runtime layout. `python:3.12-slim` base,
+  `mcp-server/requirements.txt` installed on its own layer.
+- **No secrets or state in the image**: `.dockerignore` excludes `mcp-server/.env`, `tenants/`,
+  `runs/`, `.git/`, `.venv/`, `tests/`, `docs/`. Configuration arrives only through the
+  environment (`env_file: mcp-server/.env` in compose - same file and keys as the bare-process
+  deployment); state lives in two named volumes, `opsgate-tenants` and `opsgate-runs`.
+- **Unprivileged runtime user** (`opsgate`, uid 10001) owning the state directories, so the
+  registry's own `0600`/`0700` self-healing works on a fresh volume without a manual chown.
+- **Binds `0.0.0.0` inside the container** (`OPSGATE_MCP_HOST`) - required for a published port
+  to reach the process; the mcp SDK's Host-header allow-list still applies unchanged. Compose
+  publishes on `127.0.0.1:8765` only, for a TLS-terminating reverse proxy to front.
+- **`HEALTHCHECK` on `GET /health`**, so a corrupted `tenants/registry.json` surfaces as an
+  unhealthy container rather than a process that merely answers HTTP.
+- Verified against a running container from a fresh volume: `/health` 200; `initialize` 401
+  without a token, 200 with one, 421 with a foreign `Host`; `admin-create-tenant` +
+  `admin-issue-token` via `docker exec` wrote a `0600` registry; a tenant token resolved to its
+  tenant and the shared secret to `local-dev` on `opsgate_show_profile`, both attributed
+  correctly in `runs/audit.jsonl` on the volume; container reported `healthy`.
+- `mcp-server/README.md` gains a "Docker" section: what is and is not baked in, compose
+  run, first-run tenant provisioning inside the container (the CLI resolves its argument to a
+  real path, so JSON must be written to a file - `/dev/stdin` does not work), operations, and
+  migrating the existing `tenants/` + `runs/` state into the volumes.
+
 ### Remaining audit findings closed out - 2026-08-24
 
 Every remaining item from the adversarial audit pass is now fixed, each with permanent
