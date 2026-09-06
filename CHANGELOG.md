@@ -32,6 +32,17 @@ single-machine launchd setup.
   run, first-run tenant provisioning inside the container (the CLI resolves its argument to a
   real path, so JSON must be written to a file - `/dev/stdin` does not work), operations, and
   migrating the existing `tenants/` + `runs/` state into the volumes.
+- `docs/OpsGate-Technical-Documentation.pdf` Section 12 (hosting migration) now describes the
+  container as the deployment unit: what the image provides and excludes, host requirements
+  restated in terms of the two named volumes and Docker's restart policy, hosting options A/B
+  reframed as "run the compose stack" / "run the image with a persistent volume", and a
+  migration checklist built around `docker compose up`, `docker compose cp` for the state
+  volumes, and a token-resolution check before cutover. Section 10 notes the container exists
+  but is not yet what serves production.
+- **The PDFs now have a versioned source**: `docs/src/` holds the reportlab generator
+  (`opsgate_docs.py` shared style, one `build_*.py` per document). Previously the three PDFs
+  were the only artefact and had to be regenerated from scratch to change a section. Rebuild
+  with `python3 docs/src/build_<name>.py`.
 
 ### Remaining audit findings closed out - 2026-08-24
 
