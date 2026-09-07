@@ -39,6 +39,14 @@ single-machine launchd setup.
   migration checklist built around `docker compose up`, `docker compose cp` for the state
   volumes, and a token-resolution check before cutover. Section 10 notes the container exists
   but is not yet what serves production.
+- **The need for real server hosting is now stated explicitly, not implied.** Technical doc
+  Section 12 opens with a "Why this move is required" subsection: single-machine dependency,
+  personal Tailscale account/Funnel dependency, no external monitoring, the 2026-09-06 outage
+  (Tailscale stopped on the host, server healthy on loopback, public hostname NXDOMAIN, every
+  client cut off, no alert) as the concrete instance, and no handover path. The stakeholder
+  Overview's Section 7 replaces the inaccurate "company-operated service" line with an honest
+  statement that it runs on one machine as an interim arrangement and that the move is a
+  required next step. `mcp-server/README.md`'s Docker section states the same purpose up front.
 - **The PDFs now have a versioned source**: `docs/src/` holds the reportlab generator
   (`opsgate_docs.py` shared style, one `build_*.py` per document). Previously the three PDFs
   were the only artefact and had to be regenerated from scratch to change a section. Rebuild

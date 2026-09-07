@@ -665,8 +665,33 @@ sec12 = section(12, "Recommended Approach: Migrating Off the Current Hosting",
     para("This section documents the recommended approach for moving OpsGate off a personal machine and "
          "a tunneling service onto real, durable server infrastructure. The deployment unit for that move "
          "— a container image and a compose stack — is built, verified, and committed; the hosting move "
-         "itself has not happened. What follows is what the container provides, what any host must "
-         "guarantee, the realistic hosting shapes, and the cutover."),
+         "itself has not happened. What follows is why the move is required, what the container "
+         "provides, what any host must guarantee, the realistic hosting shapes, and the cutover."),
+    Spacer(1, 6),
+    h2("Why this move is required"),
+    *bullets([
+        ("Every connected project depends on one machine.", "The server runs as a single process on one "
+         "personal Mac. When that machine is off, asleep, offline, or being rebuilt, every tenant's gate "
+         "checks, prompt compilation, and run recovery stop — there is no second instance and no "
+         "failover."),
+        ("The public endpoint depends on a personal Tailscale account and a Funnel on that same machine.",
+         "If Tailscale is stopped or the Funnel configuration is lost, the public hostname stops "
+         "resolving and every client loses OpsGate — while the server process itself stays perfectly "
+         "healthy on loopback, so nothing on the server side registers a fault."),
+        ("Nothing watches the public endpoint.", "GET /health is only checked when a person looks. There "
+         "is no external monitoring or alerting, so an outage is discovered when a Replit or Claude "
+         "session fails, not before."),
+        ("This has already happened.", "On 2026-09-06 Tailscale was found stopped on the host with no "
+         "serve configuration; the server was healthy on 127.0.0.1:8765 the entire time, the public "
+         "hostname returned NXDOMAIN, every connected client was cut off, and no alert fired."),
+        ("There is no handover.", "The launchd configuration, the Funnel setup, and the operating "
+         "knowledge live on one person's machine. The Funnel command itself is not recorded anywhere in "
+         "the repository, so nobody else can recreate the public endpoint from the checkout alone."),
+        ("Consequence:", "the current arrangement is acceptable only as a short-lived interim state. Moving "
+         "to server infrastructure with durable storage, a stable domain, a restart policy, and external "
+         "health monitoring is a requirement for running OpsGate as a shared service — not an "
+         "optimization."),
+    ]),
     Spacer(1, 6),
     h2("The deployment unit: the container"),
     *bullets([

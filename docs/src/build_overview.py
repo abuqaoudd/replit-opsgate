@@ -122,11 +122,15 @@ sec6 = section(6, "What this means day-to-day",
 )
 
 sec7 = section(7, "Where things stand today",
-    para("OpsGate is live and actively used. It currently runs as a company-operated service that any "
-         "project can connect to, and its rules, protected files, and higher-stakes categories are already "
-         "enforced on real work today, not as a future plan. The system has been through several rounds of "
-         "dedicated security and correctness review, including adversarial testing performed specifically to "
-         "find and close gaps before they could matter."),
+    para("OpsGate is live and actively used. Its rules, protected files, and higher-stakes categories are "
+         "already enforced on real work today, not as a future plan. The system has been through several "
+         "rounds of dedicated security and correctness review, including adversarial testing performed "
+         "specifically to find and close gaps before they could matter."),
+    para("Where it runs is the one thing that is not yet where it should be. Today OpsGate runs on a single "
+         "machine as an interim arrangement — which means every connected project depends on that one "
+         "machine being switched on and reachable. Moving it onto proper server infrastructure is a "
+         "required next step, not an optional improvement; the packaging for that move is already built "
+         "and tested, and the technical documentation sets out the recommended approach."),
     Spacer(1, 4),
     callout("If you take away one thing",
         "OpsGate exists so that using AI assistants on real projects doesn't require trusting each "

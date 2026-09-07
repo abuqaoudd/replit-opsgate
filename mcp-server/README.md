@@ -96,7 +96,12 @@ requires `bootout` then `bootstrap` again, not `kickstart`, for the change to ta
 ## Docker
 
 `Dockerfile`, `docker-compose.yml`, and `.dockerignore` at the repository root package this
-server as a container. The build context is the repository root, not `mcp-server/`, because the
+server as a container. This exists because the current hosting - a launchd-supervised process on
+one personal machine, reached through a personal Tailscale Funnel - is a single point of failure
+for every connected project and has to be replaced with real server infrastructure; the image is
+the deployment unit for that move (the technical documentation's Section 12 sets out why and how).
+
+The build context is the repository root, not `mcp-server/`, because the
 server imports the engine from the sibling `tools/` folder, reads `content/**` live, and
 persists state under `tenants/` and `runs/` at the repository root - the repo layout *is* the
 runtime layout, mirrored one-to-one under `/app` in the image.
