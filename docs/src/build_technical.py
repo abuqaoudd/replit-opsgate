@@ -548,33 +548,46 @@ sec9 = section(9, "Security Model",
 
 # ---------------------------------------------------------------- 10
 sec10 = section(10, "Deployment & Operations",
-    para("As of this writing, OpsGate runs as a single supervised process on one machine (not yet on "
-         "dedicated server infrastructure) — a deliberate, acknowledged interim state, not a target "
-         "architecture. A container packaging of the same server exists and is verified (Section 12), but "
-         "it is not yet what serves production traffic."),
+    para("As of this writing, OpsGate runs as the Docker container described in Section 12, via the "
+         "repository's docker-compose.yml — but still on one personal machine, not on dedicated server "
+         "infrastructure. The packaging has moved; the hosting has not. That remains a deliberate, "
+         "acknowledged interim state, and Section 12 sets out why it must change. The earlier "
+         "launchd-supervised bare process (com.opsgate.mcpserver) was unloaded and disabled on 2026-09-07 "
+         "when the container took over port 8765; its plist stays in the repository for reference only."),
     Spacer(1, 6),
     data_table(
         ["Aspect", "Current state"],
         [
-            ["Process supervision", "launchd (com.opsgate.mcpserver) — auto-restarts on crash, replacing "
-             "manual process management"],
-            ["Public exposure", "Tailscale Funnel, terminating TLS in front of the local process"],
-            ["Health check", "Unauthenticated GET /health — confirms the tenant registry itself parses, not "
-             "just that the process answers"],
-            ["Audit log", "runs/audit.jsonl, append-only, structured per-tool-call entries"],
-            ["Logs", "~/Library/Logs/opsgate-mcp-server.log (stdout/stderr under launchd)"],
-            ["Bind host", "127.0.0.1 only — reachable externally only through the Funnel"],
+            ["Process", "Docker container opsgate-mcp (image opsgate-mcp:7.1.0), managed by docker compose "
+             "from the repository root"],
+            ["Process supervision", "Docker restart policy unless-stopped — the container comes back after a "
+             "crash or daemon restart, provided Docker Desktop itself starts at login"],
+            ["Configuration", "mcp-server/.env, read by compose as env_file — same file and keys as before"],
+            ["State", "Named volumes opsgate-tenants (registry) and opsgate-runs (run state, decisions, "
+             "audit log); the metco registry was migrated in on 2026-09-07"],
+            ["Public exposure", "Tailscale Funnel, terminating TLS in front of 127.0.0.1:8765 (unchanged "
+             "target, so no client-side change)"],
+            ["Health check", "Unauthenticated GET /health, also wired as the container HEALTHCHECK — confirms "
+             "the tenant registry parses, not just that the process answers"],
+            ["Audit log", "runs/audit.jsonl inside the opsgate-runs volume, append-only, structured "
+             "per-tool-call entries"],
+            ["Logs", "docker compose logs -f opsgate-mcp (uvicorn access log + server stderr), rotated by "
+             "the json-file driver"],
+            ["Bind host", "0.0.0.0 inside the container, published on 127.0.0.1:8765 only — reachable "
+             "externally only through the Funnel"],
         ],
         col_widths=[1.7 * inch, CONTENT_W - 1.7 * inch],
     ),
     Spacer(1, 8),
     *bullets([
-        ("A code change requires restarting the supervised process.", ""),
-        ("A content change under content/** is picked up on the next call with no restart", "since those "
-         "files are read from disk live rather than cached."),
+        ("A code change is a rebuild", "docker compose up -d --build from the updated checkout."),
+        ("A content change under content/** is also a rebuild in this deployment", "content is baked "
+         "into the image; bind-mount ./content:/app/content:ro to make it hot-editable instead."),
         ("Every restart severs any in-flight MCP session, and a connected client must reconnect",
          "though with stateless HTTP now in place, there is no session to sever in the first place going "
          "forward."),
+        ("Reverting to the bare process is two commands", "launchctl enable then launchctl bootstrap of "
+         "the plist in ~/Library/LaunchAgents — after stopping the container, since both want port 8765."),
     ]),
 )
 

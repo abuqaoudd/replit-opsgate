@@ -39,6 +39,22 @@ single-machine launchd setup.
   migration checklist built around `docker compose up`, `docker compose cp` for the state
   volumes, and a token-resolution check before cutover. Section 10 notes the container exists
   but is not yet what serves production.
+- **The container is now what runs on the Mac (2026-09-07).** The launchd service
+  `com.opsgate.mcpserver` was unloaded and disabled by the operator; `docker compose up -d`
+  took over `127.0.0.1:8765` with the `metco` registry already migrated into the
+  `opsgate-tenants` volume. Verified on the production port: `/health` 200 and container
+  `healthy`; metco's real token → `opsgate_show_profile` returns metco's roots; unauthenticated
+  401; fabricated session id 200 (stateless); the Funnel target is unchanged so no client
+  configuration moves. Technical doc Section 10 rewritten to describe this deployment (compose,
+  restart policy, volumes, `docker compose logs`, rebuild-on-change, and the two-command revert
+  to the bare process). Hosting itself is unchanged — still one personal machine.
+- **State-migration recipe in `mcp-server/README.md` corrected after a real run (2026-09-07)**:
+  `docker cp` writes into the container as root, so the copied registry must be `chown`ed to the
+  runtime user (`docker compose exec -u root ... chown -R opsgate:opsgate`) before the `chmod`
+  step, or the server cannot rewrite it on the next token/profile change. Verified by migrating
+  the live `metco` registry into a running container and resolving metco's real token against
+  it (`opsgate_show_profile` returned metco's roots; attributed to `metco` in the volume's
+  `runs/audit.jsonl`).
 - **The need for real server hosting is now stated explicitly, not implied.** Technical doc
   Section 12 opens with a "Why this move is required" subsection: single-machine dependency,
   personal Tailscale account/Funnel dependency, no external monitoring, the 2026-09-06 outage

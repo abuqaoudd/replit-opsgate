@@ -183,10 +183,20 @@ token did not resolve; a `421` means the `Host` header you used is not in
   `tenants/registry.json` parses - a corrupted registry shows as `unhealthy`, not just as a
   process that answers HTTP.
 - **Migrating existing state in**: copy the current `tenants/registry.json` and `runs/**` into
-  the volumes (`docker compose cp tenants/registry.json opsgate-mcp:/app/tenants/` and the same
-  for `runs/`), then `docker compose exec opsgate-mcp chmod 600 tenants/registry.json`. This is
-  the one true state migration described in the technical documentation's hosting section;
-  everything else is a fresh code deploy.
+  the volumes, hand them to the runtime user, and restore the registry's permissions:
+
+  ```bash
+  docker compose cp tenants/registry.json opsgate-mcp:/app/tenants/registry.json
+  docker compose cp runs/. opsgate-mcp:/app/runs/          # only if runs/ exists
+  docker compose exec -u root opsgate-mcp chown -R opsgate:opsgate /app/tenants /app/runs
+  docker compose exec opsgate-mcp sh -c 'chmod 700 /app/tenants && chmod 600 /app/tenants/registry.json'
+  docker compose exec opsgate-mcp python tools/opsgate.py admin-list-tenants   # confirm
+  ```
+
+  The `chown` step is required: `docker cp` writes files into the container as root, and the
+  server runs as `opsgate` (uid 10001), which then cannot rewrite the registry on the next token
+  or profile change. This is the one true state migration described in the technical
+  documentation's hosting section; everything else is a fresh code deploy.
 
 ## Authentication
 
